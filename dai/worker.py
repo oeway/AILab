@@ -54,8 +54,12 @@ class Task(object):
             vdict = {key: value, "status.running": self.processor.running}
         else:
             vdict = {key: value}
-        self.meteorClient.call('tasks.update.worker', [
-                               self.id, self.worker.id, self.worker.token, {'$set': vdict}])
+        try:
+            self.meteorClient.call('tasks.update.worker', [
+                                   self.id, self.worker.id, self.worker.token, {'$set': vdict}])
+        except Exception as e:
+            print('error ocurred during setting ' + str(vdict))
+
 
 
     def __getattr__(self, attr):
@@ -76,12 +80,20 @@ class Task(object):
         self.__delitem__(item)
 
     def push(self, key, value):
-        self.meteorClient.call('tasks.update.worker', [
-                               self.id, self.worker.id, self.worker.token, {'$push': {key: value}}])
+        try:
+            self.meteorClient.call('tasks.update.worker', [
+                                   self.id, self.worker.id, self.worker.token, {'$push': {key: value}}])
+        except Exception as e:
+            print('error ocurred during setting ' + key)
+
 
     def pull(self, key, value):
-        self.meteorClient.call('tasks.update.worker', [
-                               self.id, self.worker.id, self.worker.token, {'$pull': {key: value}}])
+        try:
+            self.meteorClient.call('tasks.update.worker', [
+                                   self.id, self.worker.id, self.worker.token, {'$pull': {key: value}}])
+        except Exception as e:
+            print('error ocurred during setting ' + key)
+
 
 
 class Widget(object):
@@ -327,16 +339,25 @@ class Worker(object):
             return None
 
     def __setitem__(self, key, value):
-        self.meteorClient.call('workers.update', [self.id, self.token, {
-                               '$set': {key: value}}], self.default_update_callback)
+        try:
+            self.meteorClient.call('workers.update', [self.id, self.token, {
+                                   '$set': {key: value}}], self.default_update_callback)
+        except Exception as e:
+            print('error ocurred during setting ' + key)
 
     def push(self, key, value):
-        self.meteorClient.call('workers.update', [self.id, self.token, {
-                               '$push': {key: value}}], self.default_update_callback)
+        try:
+            self.meteorClient.call('workers.update', [self.id, self.token, {
+                                   '$push': {key: value}}], self.default_update_callback)
+        except Exception as e:
+            print('error ocurred during setting ' + key)
 
     def pull(self, key, value):
-        self.meteorClient.call('workers.update', [self.id, self.token, {
-                               '$pull': {key: value}}], self.default_update_callback)
+        try:
+            self.meteorClient.call('workers.update', [self.id, self.token, {
+                                   '$pull': {key: value}}], self.default_update_callback)
+        except Exception as e:
+            print('error ocurred during setting ' + key)
 
     def default_update_callback(self, error, result):
         if error:

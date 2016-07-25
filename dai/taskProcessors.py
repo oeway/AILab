@@ -65,11 +65,14 @@ class TaskProcessor(object):
         if not os.path.exists(self.workdir):
             os.makedirs(self.workdir)
 
-    def update(self, name, value):
-        if value is None and type(name) == type(dict()):
-            self.meteorClient.call('tasks.update.worker', [self.id, self.worker.id, self.worker.token, {'$set': name}])
-        else:
-            self.meteorClient.call('tasks.update.worker', [self.id, self.worker.id, self.worker.token, {'$set': {name: value}}])
+    def update(self, key, value):
+        try:
+            if value is None and type(key) == type(dict()):
+                self.meteorClient.call('tasks.update.worker', [self.id, self.worker.id, self.worker.token, {'$set': key}])
+            else:
+                self.meteorClient.call('tasks.update.worker', [self.id, self.worker.id, self.worker.token, {'$set': {key: value}}])
+        except Exception as e:
+            print('error ocurred during setting ' + key)
 
     def stop(self):
         self.aborted.set()
@@ -94,11 +97,11 @@ class TaskProcessor(object):
             print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.name, self.task._id, self.task.widgetId))
             traceback.print_exc()
             self.task['status.error'] = traceback.format_exc()
-            self.end()
+            self.end(force_quit=True)
 
-    def end(self):
+    def end(self, force_quit=False):
         try:
-            if len(self.task.subtasks) > 0:
+            if not force_quit and len(self.task.subtasks) > 0:
                 self.task['status.stage'] = 'finishing'
                 lastfinished = 0
                 while True:
@@ -193,7 +196,7 @@ class ThreadedTaskProcessor(TaskProcessor):
         self.task['status.stage'] = 'process_task is not implemented'
 
 
-class ProcessTaskProcessor(TaskProcessor):
+class ProcessTaskProcessor_(TaskProcessor):
 
     def process_output(self, line):
         self.task['status.progress'] = int(line)
@@ -233,7 +236,7 @@ class ProcessTaskProcessor(TaskProcessor):
             print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.name, self.task._id, self.task.widgetId))
             traceback.print_exc()
             self.task['status.error'] = traceback.format_exc()
-            self.end()
+            self.end(force_quit=True)
             return False
         # run the shell as a subprocess:
 
@@ -287,7 +290,7 @@ class ProcessTaskProcessor(TaskProcessor):
                 print('error occured during terminating a process.')
             raise
         if self.aborted.is_set():
-            self.end()
+            self.end(force_quit=True)
             return False
         elif p.returncode != 0:
             # Report that this task is finished
@@ -304,15 +307,15 @@ class ProcessTaskProcessor(TaskProcessor):
             self.after_runtime_error()
             print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.name, self.task._id, self.task.widgetId))
             self.task['status.error'] = '%s task failed with error code %s' % (self.name(), str(p.returncode))
-            self.end()
+            self.end(force_quit=True)
             return False
         else:
             self.task['status.progress'] = 100
-            self.end()
+            self.end(force_quit=True)
             self.logger.info('%s task completed.' % self.name())
             return True
 
-class ThreadedProcessTaskProcessor(ProcessTaskProcessor):
+class ProcessTaskProcessor(ProcessTaskProcessor_):
     def run(self, resources=None):
         self.taskThread = threading.Thread(target=self.run_thread,
                                            args=[resources])
