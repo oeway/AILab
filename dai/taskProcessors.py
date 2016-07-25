@@ -324,7 +324,7 @@ class ProcessTaskProcessor(ProcessTaskProcessor_):
 
     def run_thread(self, *args):
         try:
-            super(ThreadedProcessTaskProcessor, self).run(*args)
+            super(ProcessTaskProcessor, self).run(*args)
         except Exception as e:
             print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.name, self.task._id, self.task.widgetId))
             traceback.print_exc()
