@@ -1,4 +1,5 @@
-# DistributedAI toolkits
+# Toolkits for DistributedAI platform
+
 Python toolkits for connecting distributedAI platform, the following module are included:
 ## Worker
 The worker for communicating with distributedAI platform and executing tasks defined by widget.
@@ -10,7 +11,7 @@ A set of predefined taskProcessor to exectue tasks, three type of taskProcessors
 
 # Installation
 Run the following command to install:
-```
+```bash
 pip install dai
 ```
 That's it.
@@ -18,7 +19,7 @@ That's it.
 # Getting Start
 You need to login to distributedAI platform and then goto "Widget Workers", create a new worker, and get the id and token.
 
-As an example, we get a worker id=iJX99fYEdfasigEAd and token=jguogvqlerkygcc.
+As an example, we get a worker `id=iJX99fYEdfasigEAd` and `token=jguogvqlerkygcc`.
 
 Then, to run the actual worker, you can open a python prompt session and type the following commands:
 
@@ -31,6 +32,6 @@ d = dai.Worker(worker_id='iJX99fYEdfasigEAd',
                dev_mode=True)
 d.start()
 ```
-And you will see the worker running on the platform, now you are ready to go, try to create a widget.
+And you will see the worker running on the platform, now you are ready to go, try to create a widget and add the worker you just created.
 
 
