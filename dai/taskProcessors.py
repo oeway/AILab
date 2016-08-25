@@ -172,7 +172,10 @@ class TaskProcessor(object):
 
 
 class ThreadedTaskProcessor(TaskProcessor):
-
+    def __init__(self, task, widget, worker, process=None, **kwargs):
+        self.process = process
+        super(ThreadedTaskProcessor, self).__init__(task, widget, worker, **kwargs)
+        
     def task_arguments(self, resources, env):
         return []
 
@@ -185,6 +188,8 @@ class ThreadedTaskProcessor(TaskProcessor):
     def run_thread(self, *args):
         try:
             self.process_task(*args)
+            if self.process:
+                self.process(self.task, *args)
         except Exception as e:
             print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.name, self.task._id, self.task.widgetId))
             traceback.print_exc()
@@ -193,7 +198,7 @@ class ThreadedTaskProcessor(TaskProcessor):
             self.end()
 
     def process_task(self, *args):
-        self.task['status.stage'] = 'process_task is not implemented'
+        pass
 
 
 class ProcessTaskProcessor_(TaskProcessor):
