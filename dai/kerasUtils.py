@@ -14,7 +14,7 @@ class ProgressTracker(keras.callbacks.Callback):
         self.task['status.progress'] = 0
 
     def on_batch_begin(self, batch, logs={}):
-        if self.task.processor.aborted.is_set():
+        if self.task.abort.is_set():
             self.task['status.error'] = 'stopped by user'
             self.model.stop_training = True
             raise Exception('stopped by user')
@@ -50,7 +50,3 @@ class ProgressTracker(keras.callbacks.Callback):
             self.task.push('output.'+k, v)
         self.task['output.elapsed_time'] = "%.2fs"%self.elapsed_time
         self.task['output.last_epoch_update_time'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        if self.save_weights:
-            weightsFilePath = os.path.join(self.task.processor.workdir, 'model_weights.hdf5')
-            self.model.save_weights(weightsFilePath, overwrite=True)
-            self.task['output.weights_saved_path'] = weightsFilePath

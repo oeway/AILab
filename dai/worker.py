@@ -15,13 +15,16 @@ except ImportError:
     from queue import Queue, Empty  # python 3.x
 from subprocess import Popen, PIPE, STDOUT
 from utils import NonBlockingStreamReader, Resource
+from utils import rate_limited
 
+TASK_INNER_PROPERTIES = ['taskDoc', 'id', 'processor', 'worker', 'subtasks', 'meteorClient', 'has_key', 'abort']
 class Task(object):
 
     def __init__(self, taskDoc, worker, meteorClient):
         self.taskDoc = taskDoc
         self.worker = worker
         self.meteorClient = meteorClient
+        self.abort = threading.Event()
         self.has_key = self.taskDoc.has_key
         if self.taskDoc.has_key('_id'):
             self.id = self.taskDoc['_id']
@@ -48,6 +51,8 @@ class Task(object):
             return None
 
     def __setitem__(self, key, value):
+        if self[key] == value:
+            return
         if key == "visible2worker" and value == False:
             vdict = {key: value, "status.running": False}
         elif self.processor and self['status.running'] != self.processor.running:
@@ -60,25 +65,52 @@ class Task(object):
         except Exception as e:
             print('error ocurred during setting ' + str(vdict))
 
-
-
     def __getattr__(self, attr):
-        if attr in ['taskDoc', 'id', 'processor', 'worker', 'subtasks', 'meteorClient', 'has_key']:
+        if attr in TASK_INNER_PROPERTIES:
             return super(Task, self).__getattribute__(attr)
+        elif attr == 'running':
+            if self.processor:
+                return self.processor.running
+            else:
+                return False
         if self.taskDoc.has_key(attr):
             return self.taskDoc[attr]
         else:
             return None
 
+    @rate_limited(0.3)
     def __setattr__(self, key, value):
-        if key in ['taskDoc', 'id', 'processor', 'worker', 'subtasks', 'meteorClient', 'has_key']:
+        if key in TASK_INNER_PROPERTIES:
             super(Task, self).__setattr__(key, value)
+        elif key == 'running':
+            if self.processor:
+                self.processor.running = value
         else:
             self.__setitem__(key, value)
 
     def __delattr__(self, item):
         self.__delitem__(item)
 
+    def get(self, key):
+        return self.__getitem__(key)
+
+    @rate_limited(0.3, important=True)
+    def set(self, key, value):
+        if key == 'running':
+            if self.processor:
+                self.processor.running = value
+        else:
+            self.__setitem__(key, value)
+
+    @rate_limited(0.3, important=False)
+    def update(self, key, value):
+        if key == 'running':
+            if self.processor:
+                self.processor.running = value
+        else:
+            self.__setitem__(key, value)
+
+    @rate_limited(0.3, important=True)
     def push(self, key, value):
         try:
             self.meteorClient.call('tasks.update.worker', [
@@ -86,7 +118,7 @@ class Task(object):
         except Exception as e:
             print('error ocurred during setting ' + key)
 
-
+    @rate_limited(0.3, important=True)
     def pull(self, key, value):
         try:
             self.meteorClient.call('tasks.update.worker', [
@@ -339,6 +371,8 @@ class Worker(object):
             return None
 
     def __setitem__(self, key, value):
+        if self[key] == value:
+            return
         try:
             self.meteorClient.call('workers.update', [self.id, self.token, {
                                    '$set': {key: value}}], self.default_update_callback)

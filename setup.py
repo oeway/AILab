@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='dai',
-      version='0.3.9',
+      version='0.3.12',
       description='python worker for distributedAI',
       url='http://github.com/oeway/distributedAI',
       author='Wei OUYANG',

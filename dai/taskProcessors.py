@@ -25,7 +25,7 @@ class TaskProcessor(object):
         self.parentId = None if not task.parent else task.parent
         FORMAT = '%(asctime)-15s %(clientip)s %(user)-8s %(message)s'
         self.logger = logging.getLogger('taskProcessor')
-        self.aborted = threading.Event()
+        self.abort = self.task.abort
         self.exception = None
         self.running = False
         if self.task.parent is None or self.task.parent == '':
@@ -75,15 +75,15 @@ class TaskProcessor(object):
             print('error ocurred during setting ' + key)
 
     def stop(self):
-        self.aborted.set()
+        self.abort.set()
         for subtask in self.task.subtasks:
             if subtask.processor:
-                subtask.processor.aborted.set()
+                subtask.processor.abort.set()
         self.task['status.stage'] = 'aborting'
         print('stopping task...')
 
     def start(self, resources=None):
-        self.aborted.clear()
+        self.abort.clear()
         self.running = True
         self.task['status.stage'] = 'starting'
         self.task['status.running'] = True
@@ -110,19 +110,19 @@ class TaskProcessor(object):
                     for t in self.task.subtasks:
                         if not self.task.processor.running:
                             finished += 1
-                        if self.aborted.is_set():
+                        if self.abort.is_set():
                             break
                     if finished == total:
                         break
-                    if self.aborted.is_set():
+                    if self.abort.is_set():
                         break
                     if lastfinished != finished:
                         self.task['status.stage'] = '{}/{}'.format(finished,total)
                         lastfinished = finished
                     time.sleep(0.5)
 
-                if self.aborted.is_set():
-                    self.task['status.stage'] = 'aborted'
+                if self.abort.is_set():
+                    self.task['status.stage'] = 'abort'
                 else:
                     self.task['status.stage'] = 'done'
                     self.task['status.progress'] = 100
@@ -170,12 +170,25 @@ class TaskProcessor(object):
         self.task['status.info'] = 'run is not implemented'
         self.end()
 
+    def check_subtasks(self):
+        status = {}
+        prog = 0
+        finished = 0
+        for subtask in self.task.subtasks:
+            prog +=subtask['status.progress']
+            if not subtask.processor.running:
+                finished +=1
+        status['progress'] = prog
+        status['finished'] = finished
+        status['total'] = len(self.task.subtasks)
+        return status
+
 
 class ThreadedTaskProcessor(TaskProcessor):
     def __init__(self, task, widget, worker, process=None, **kwargs):
         self.process = process
         super(ThreadedTaskProcessor, self).__init__(task, widget, worker, **kwargs)
-        
+
     def task_arguments(self, resources, env):
         return []
 
@@ -277,7 +290,7 @@ class ProcessTaskProcessor_(TaskProcessor):
                 else:
                     time.sleep(0.05)
 
-                if self.aborted.is_set():
+                if self.abort.is_set():
                     if sigterm_time is None:
                         # Attempt graceful shutdown
                         p.send_signal(signal.SIGTERM)
@@ -294,7 +307,7 @@ class ProcessTaskProcessor_(TaskProcessor):
             except Exception as e:
                 print('error occured during terminating a process.')
             raise
-        if self.aborted.is_set():
+        if self.abort.is_set():
             self.end(force_quit=True)
             return False
         elif p.returncode != 0:
