@@ -1,5 +1,9 @@
 import keras
 from keras import backend as K
+import time
+import os
+import datetime
+import numpy as np
 
 class ProgressTracker(keras.callbacks.Callback):
     def __init__(self, task, save_weights=True):
@@ -41,13 +45,12 @@ class ProgressTracker(keras.callbacks.Callback):
             self.task['status.error'] = 'Optimizer must have a "lr" attribute.'
 
     def on_epoch_end(self, epoch, logs={}):
-        import requests
         self.task.push('output.epoch', epoch)
         for k, v in logs.items():
             self.task.push('output.'+k, v)
         self.task['output.elapsed_time'] = "%.2fs"%self.elapsed_time
         self.task['output.last_epoch_update_time'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if self.save_weights:
-            weightsFilePath = os.path.join(self.processor.workdir, 'model_weights.hdf5')
+            weightsFilePath = os.path.join(self.task.processor.workdir, 'model_weights.hdf5')
             self.model.save_weights(weightsFilePath, overwrite=True)
             self.task['output.weights_saved_path'] = weightsFilePath

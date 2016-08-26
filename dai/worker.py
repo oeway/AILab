@@ -382,6 +382,7 @@ class Worker(object):
             aThread.start()
             self.taskWorkerThreads.append(aThread)
             self.taskWorkerAbortEvents.append(abortEvent)
+        print('{} task threads started'.format(self.thread_num))
 
     def stop_task_threads(self):
         for abortEvent in self.taskWorkerAbortEvents:
@@ -511,7 +512,7 @@ class Worker(object):
 
     def work_on_task(self, abortEvent):
         import time
-        print('working thread for tasks of widget {} started'.format(self.id))
+        # print('working thread for tasks of widget {} started'.format(self.id))
         while True:
             if abortEvent.is_set():
                 break
