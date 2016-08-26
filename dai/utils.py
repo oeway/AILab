@@ -17,7 +17,7 @@ class Resource(object):
         value = self.allocations[task.id]
         del self.allocations[task.id]
         self.left += value
-        
+
 class NonBlockingStreamReader:
 
     def __init__(self, stream):
@@ -56,7 +56,6 @@ class NonBlockingStreamReader:
             if self.end:
                 raise UnexpectedEndOfStream
             return None
-
 
 class UnexpectedEndOfStream(Exception):
     pass
