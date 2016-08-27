@@ -20,20 +20,20 @@ class TaskProcessor(object):
         self.worker = worker
         self.meteorClient = self.worker.meteorClient
         assert not self.task is None
-        self.isSubTask = bool(self.task.parent)
-        self.id = self.task._id
-        self.parentId = None if not task.parent else task.parent
+        self.isSubTask = bool(self.task.get('parent'))
+        self.id = self.task.id
+        self.parentId = None if not task.get('parent') else task.get('parent')
         FORMAT = '%(asctime)-15s %(clientip)s %(user)-8s %(message)s'
         self.logger = logging.getLogger('taskProcessor')
         self.abort = self.task.abort
         self.exception = None
         self.running = False
-        if self.task.parent is None or self.task.parent == '':
+        if self.task.get('parent') is None or self.task.get('parent') == '':
             self.workdir = os.path.abspath(os.path.join(
                 self.worker.workdir, self.widget.id, self.id))
         else:
             self.workdir = os.path.abspath(os.path.join(
-                self.worker.workdir, self.widget.id, self.task.parent, self.id))
+                self.worker.workdir, self.widget.id, self.task.get('parent'), self.id))
         if make_workdir:
             self.make_workdir()
         self.updateCallbackDict = {}
@@ -53,8 +53,8 @@ class TaskProcessor(object):
 
     def get_widget_code(self, name):
         name = name.replace('.', '_')
-        if self.widget.code_snippets and self.widget.code_snippets.has_key(name):
-            return self.widget.code_snippets[name]['content']
+        if self.widget.get('code_snippets') and self.widget.get('code_snippets').has_key(name):
+            return self.widget.get('code_snippets')[name]['content']
         else:
             return None
 
@@ -79,30 +79,30 @@ class TaskProcessor(object):
         for subtask in self.task.subtasks:
             if subtask.processor:
                 subtask.processor.abort.set()
-        self.task['status.stage'] = 'aborting'
+        self.task.set('status.stage', 'aborting')
         print('stopping task...')
 
     def start(self, resources=None):
         self.abort.clear()
         self.running = True
-        self.task['status.stage'] = 'starting'
-        self.task['status.running'] = True
-        self.task['status.progress'] = -1
-        self.task['status.error'] = ''
+        self.task.set('status.stage', 'starting')
+        self.task.set('status.running', True)
+        self.task.set('status.progress', -1)
+        self.task.set('status.error', '')
         print('starting...')
         try:
             self.before()
             self.run(resources)
         except Exception as e:
-            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.name, self.task._id, self.task.widgetId))
+            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
             traceback.print_exc()
-            self.task['status.error'] = traceback.format_exc()
+            self.task.set('status.error', traceback.format_exc())
             self.end(force_quit=True)
 
     def end(self, force_quit=False):
         try:
             if not force_quit and len(self.task.subtasks) > 0:
-                self.task['status.stage'] = 'finishing'
+                self.task.set('status.stage', 'finishing')
                 lastfinished = 0
                 while True:
                     finished = 0
@@ -117,39 +117,39 @@ class TaskProcessor(object):
                     if self.abort.is_set():
                         break
                     if lastfinished != finished:
-                        self.task['status.stage'] = '{}/{}'.format(finished,total)
+                        self.task.set('status.stage', '{}/{}'.format(finished,total))
                         lastfinished = finished
                     time.sleep(0.5)
 
                 if self.abort.is_set():
-                    self.task['status.stage'] = 'abort'
+                    self.task.set('status.stage', 'abort')
                 else:
-                    self.task['status.stage'] = 'done'
-                    self.task['status.progress'] = 100
+                    self.task.set('status.stage', 'done')
+                    self.task.set('status.progress', 100)
 
-            self.task['cmd'] = ''
-            if self.task['status.progress'] < 0:
-                self.task['status.progress'] = 0
-            if 'ing' in self.task['status.stage']:
-                self.task['status.stage'] = 'exited'
+            self.task.set('cmd', '')
+            if self.task.get('status.progress') < 0:
+                self.task.set('status.progress', 0)
+            if 'ing' in self.task.get('status.stage'):
+                self.task.set('status.stage', 'exited')
 
         except Exception as e:
-            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.name, self.task._id, self.task.widgetId))
+            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
             traceback.print_exc()
-            self.task['status.error'] = traceback.format_exc()
+            self.task.set('status.error', traceback.format_exc())
         finally:
             self.running = False
-            self.task['status.running'] = False
-            self.task['visible2worker'] = False
+            self.task.set('status.running', False)
+            self.task.set('visible2worker', False)
             try:
                 self.after()
             except Exception as e:
-                print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.name, self.task._id, self.task.widgetId))
+                print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
                 traceback.print_exc()
 
     def before(self):
         pass
-        #self.task['output'] = {}
+        #self.task.set('output', {})
 
     def after(self):
         pass
@@ -161,13 +161,13 @@ class TaskProcessor(object):
         return []
 
     def name(self):
-        return self.task['name']
+        return self.task.get('name')
 
     def run(self, resources=None):
         '''
         should call self.end() after all process is over
         '''
-        self.task['status.info'] = 'run is not implemented'
+        self.task.set('status.info', 'run is not implemented')
         self.end()
 
     def check_subtasks(self):
@@ -175,7 +175,7 @@ class TaskProcessor(object):
         prog = 0
         finished = 0
         for subtask in self.task.subtasks:
-            prog +=subtask['status.progress']
+            prog +=subtask.get('status.progress')
             if not subtask.processor.running:
                 finished +=1
         status['progress'] = prog
@@ -204,9 +204,9 @@ class ThreadedTaskProcessor(TaskProcessor):
             if self.process:
                 self.process(self.task, *args)
         except Exception as e:
-            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.name, self.task._id, self.task.widgetId))
+            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
             traceback.print_exc()
-            self.task['status.error'] = traceback.format_exc()
+            self.task.set('status.error', traceback.format_exc())
         finally:
             self.end()
 
@@ -217,7 +217,7 @@ class ThreadedTaskProcessor(TaskProcessor):
 class ProcessTaskProcessor_(TaskProcessor):
 
     def process_output(self, line):
-        self.task['status.progress'] = int(line)
+        self.task.set('status.progress', int(line))
         print('processing line: ' + line)
         sys.stdout.flush()
         return True
@@ -232,9 +232,9 @@ class ProcessTaskProcessor_(TaskProcessor):
         env = os.environ.copy()
         args = self.task_arguments(resources, env)
         if not args:
-            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.name, self.task._id, self.task.widgetId))
+            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
             self.logger.error('Could not create the arguments for Popen')
-            self.task['status.error'] = 'Could not create the arguments for Popen'
+            self.task.set('status.error', 'Could not create the arguments for Popen')
             return False
         # Convert them all to strings
         args = [str(x) for x in args if str(x) != '']
@@ -251,9 +251,9 @@ class ProcessTaskProcessor_(TaskProcessor):
             p = Popen(args, bufsize=0, stdout=PIPE, stderr=STDOUT,
                       shell=False, universal_newlines=True)
         except Exception as e:
-            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.name, self.task._id, self.task.widgetId))
+            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
             traceback.print_exc()
-            self.task['status.error'] = traceback.format_exc()
+            self.task.set('status.error', traceback.format_exc())
             self.end(force_quit=True)
             return False
         # run the shell as a subprocess:
@@ -284,9 +284,9 @@ class ProcessTaskProcessor_(TaskProcessor):
                                 self.name(), line.strip()))
                             unrecognized_output.append(line)
                     except:
-                        print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.name, self.task._id, self.task.widgetId))
+                        print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
                         traceback.print_exc()
-                        self.task['status.error'] = traceback.format_exc()
+                        self.task.set('status.error', traceback.format_exc())
                 else:
                     time.sleep(0.05)
 
@@ -323,12 +323,12 @@ class ProcessTaskProcessor_(TaskProcessor):
                         self.traceback = self.traceback + \
                             ('\n'.join(unrecognized_output))
             self.after_runtime_error()
-            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.name, self.task._id, self.task.widgetId))
-            self.task['status.error'] = '%s task failed with error code %s' % (self.name(), str(p.returncode))
+            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
+            self.task.set('status.error', '%s task failed with error code %s' % (self.name(), str(p.returncode)))
             self.end(force_quit=True)
             return False
         else:
-            self.task['status.progress'] = 100
+            self.task.set('status.progress', 100)
             self.end(force_quit=True)
             self.logger.info('%s task completed.' % self.name())
             return True
@@ -344,9 +344,9 @@ class ProcessTaskProcessor(ProcessTaskProcessor_):
         try:
             super(ProcessTaskProcessor, self).run(*args)
         except Exception as e:
-            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.name, self.task._id, self.task.widgetId))
+            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
             traceback.print_exc()
-            self.task['status.error'] = traceback.format_exc()
+            self.task.set('status.error', traceback.format_exc())
         finally:
             self.end()
 

@@ -38,10 +38,10 @@ from dai.taskProcessors import ThreadedTaskProcessor
 
 class MyTaskProcessor(ThreadedTaskProcessor):
     def process_task(self, *args):
-        self.task["status.info"] = "hello from worker"
-        self.task["status.error"] = "this is a fake error"
+        self.task.set("status.info", "hello from worker")
+        self.task.set("status.error", "this is a fake error")
         time.sleep(10)
-        self.task["status.stage"] = "done"
+        self.task.set("status.stage", "done")
 
 if __name__ == "__worker__":
     TASK_PROCESSOR = MyTaskProcessor(TASK, WIDGET, WORKER)
@@ -52,4 +52,3 @@ Just fill your code which does some job into `process_task` function. With self.
 You may also want to use HTML and JS to create some awsome GUI for the user to interact, just try to fill PANEL.html and PANEL.js with some code, it uses [AngularJS](https://angularjs.org/) and [Angular-Material](https://material.angularjs.org/latest/) as its underlying implementation.
 
 More examples and details to be continue...
-

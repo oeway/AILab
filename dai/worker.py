@@ -17,6 +17,8 @@ from subprocess import Popen, PIPE, STDOUT
 from utils import NonBlockingStreamReader, Resource
 from utils import rate_limited
 
+RATE_LIMIT = 5
+
 TASK_INNER_PROPERTIES = ['taskDoc', 'id', 'processor', 'worker', 'subtasks', 'meteorClient', 'has_key', 'abort']
 class Task(object):
 
@@ -49,13 +51,28 @@ class Task(object):
             return self.taskDoc[key]
         else:
             return None
-
-    def __setitem__(self, key, value):
-        if self[key] == value:
+    def __set__(self, key, value=None):
+        assert (type(key) is str and not value is None)or (type(key) is dict and value is None)
+        if key == 'running':
+            if self.processor:
+                self.processor.running = value
             return
+        if not type(key) is dict and self.get(key) == value:
+            return
+
+        if type(key) is dict:
+            vdict = key
+            try:
+                self.meteorClient.call('tasks.update.worker', [
+                                       self.id, self.worker.id, self.worker.token, {'$set': vdict}])
+            except Exception as e:
+                print('error ocurred during setting ' + str(vdict))
+            finally:
+                return
+
         if key == "visible2worker" and value == False:
             vdict = {key: value, "status.running": False}
-        elif self.processor and self['status.running'] != self.processor.running:
+        elif self.processor and self.get('status.running') != self.processor.running:
             vdict = {key: value, "status.running": self.processor.running}
         else:
             vdict = {key: value}
@@ -64,6 +81,9 @@ class Task(object):
                                    self.id, self.worker.id, self.worker.token, {'$set': vdict}])
         except Exception as e:
             print('error ocurred during setting ' + str(vdict))
+
+    def __setitem__(self, key, value):
+        return self.__set__(key,value)
 
     def __getattr__(self, attr):
         if attr in TASK_INNER_PROPERTIES:
@@ -78,15 +98,12 @@ class Task(object):
         else:
             return None
 
-    @rate_limited(0.3)
+    @rate_limited(RATE_LIMIT)
     def __setattr__(self, key, value):
         if key in TASK_INNER_PROPERTIES:
             super(Task, self).__setattr__(key, value)
-        elif key == 'running':
-            if self.processor:
-                self.processor.running = value
         else:
-            self.__setitem__(key, value)
+            self.__set__(key,value)
 
     def __delattr__(self, item):
         self.__delitem__(item)
@@ -94,38 +111,31 @@ class Task(object):
     def get(self, key):
         return self.__getitem__(key)
 
-    @rate_limited(0.3, important=True)
-    def set(self, key, value):
-        if key == 'running':
-            if self.processor:
-                self.processor.running = value
-        else:
-            self.__setitem__(key, value)
+    @rate_limited(RATE_LIMIT, important=True)
+    def set(self, key, value=None):
+        self.__set__(key, value)
 
-    @rate_limited(0.3, important=False)
-    def update(self, key, value):
-        if key == 'running':
-            if self.processor:
-                self.processor.running = value
-        else:
-            self.__setitem__(key, value)
+    @rate_limited(RATE_LIMIT, important=False)
+    def update(self, key, value=None):
+        self.__set__(key, value)
 
-    @rate_limited(0.3, important=True)
-    def push(self, key, value):
+    @rate_limited(RATE_LIMIT, important=True)
+    def push(self, key, value=None):
         try:
+            vdict = key if type(key) is dict and value is None else {key: value}
             self.meteorClient.call('tasks.update.worker', [
-                                   self.id, self.worker.id, self.worker.token, {'$push': {key: value}}])
+                                   self.id, self.worker.id, self.worker.token, {'$push': vdict}])
         except Exception as e:
             print('error ocurred during setting ' + key)
 
-    @rate_limited(0.3, important=True)
-    def pull(self, key, value):
+    @rate_limited(RATE_LIMIT, important=True)
+    def pull(self, key, value=None):
         try:
+            vdict = key if type(key) is dict and value is None else {key: value}
             self.meteorClient.call('tasks.update.worker', [
-                                   self.id, self.worker.id, self.worker.token, {'$pull': {key: value}}])
+                                   self.id, self.worker.id, self.worker.token, {'$pull': vdict}])
         except Exception as e:
             print('error ocurred during setting ' + key)
-
 
 
 class Widget(object):
@@ -160,37 +170,31 @@ class Widget(object):
         # TODO: remove this after login
         raise Exception('widgets is readonly for worker.')
 
-    def __getattr__(self, attr):
-        if attr in ['widgetDoc', 'id', 'has_key', 'meteorClient']:
-            return super(Widget, self).__getattribute__(attr)
-        if self.widgetDoc.has_key(attr):
-            return self.widgetDoc[attr]
-        else:
-            return None
+    def get(self, key):
+        return self.__getitem__(key)
 
-    def __setattr__(self, key, value):
-        if key in ['widgetDoc', 'id', 'has_key', 'meteorClient']:
-            super(Widget, self).__setattr__(key, value)
-        else:
-            self.__setitem__(key, value)
+    @rate_limited(RATE_LIMIT, important=True)
+    def set(self, key, value):
+        self.__setitem__(key, value)
 
-    def __delattr__(self, item):
-        self.__delitem__(item)
+    @rate_limited(RATE_LIMIT, important=False)
+    def update(self, key, value):
+        self.__setitem__(key, value)
 
     def exec_widget_task_processor(self, task, widget, worker):
         import time
-        id = widget._id
+        id = widget.id
         widget_task_processor = self.default_task_processor
         ns = {'TASK': task, 'WIDGET': widget,
               'WORKER': worker, '__name__': '__worker__', 'time': time}
-        exec(widget['code_snippets']['__init___py']['content'], ns)
+        exec(widget.get('code_snippets')['__init___py']['content'], ns)
         if ns.has_key('TASK_PROCESSOR'):
             return ns['TASK_PROCESSOR']
         else:
             return None
 
     def default_task_processor(self, task, widget, worker):
-        print('default_task_processor: ' + task._id)
+        print('default_task_processor: ' + task.id)
 
     def get_task_processor(self):
         return self.exec_widget_task_processor
@@ -302,11 +306,10 @@ class Worker(object):
             features += self.resources[k].id + ':\n'
             for f in self.resources[k].features.values():
                 features += str(f) + '\n'
-        self['version'] = self.workerVersion
-        self['sysInfo'] = features
-        self['name'] = self.resources[
-            'platform'].features['node'] + '-' + self.id
-        self['status'] = 'ready'
+        self.set('version', self.workerVersion)
+        self.set('sysInfo', features)
+        self.set('name', self.resources['platform'].features['node'] + '-' + self.id)
+        self.set('status', 'ready')
         while True:
             self.get_gpu_resources()
             resources = ''
@@ -314,13 +317,13 @@ class Worker(object):
                 resources += self.resources[k].id + ':\n'
                 for s in self.resources[k].status.values():
                     resources += str(s) + '\n'
-            self['resources'] = resources
+            self.set('resources', resources)
             time.sleep(2.0)
 
     def register_widget(self, widget):
-        id = widget._id
+        id = widget.id
         print('register widget: ' + id)
-        if widget.mode == 'development':
+        if widget.get('mode') == 'development':
             widgetWorkdir = os.path.join(self.workdir, id)
             if not os.path.exists(widgetWorkdir):
                 os.makedirs(widgetWorkdir)
@@ -328,7 +331,7 @@ class Worker(object):
             if self.productionWidgets.has_key(id):
                 del self.productionWidgets[id]
 
-        if widget['mode'] == 'production':
+        if widget.get('mode') == 'production':
             self.productionWidgets[id] = widget
             if self.devWidgets.has_key(id):
                 del self.devWidgets[id]
@@ -370,15 +373,31 @@ class Worker(object):
         else:
             return None
 
-    def __setitem__(self, key, value):
-        if self[key] == value:
+    def __set__(self, key, value=None):
+        assert (type(key) is str and not value is None)or (type(key) is dict and value is None)
+        if not type(key) is dict and self.get(key) == value:
             return
         try:
+            vdict = key if type(key) is dict and value is None else {key: value}
             self.meteorClient.call('workers.update', [self.id, self.token, {
-                                   '$set': {key: value}}], self.default_update_callback)
+                                   '$set': vdict}], self.default_update_callback)
         except Exception as e:
             print('error ocurred during setting ' + key)
+    def __setitem__(self, key, value):
+        self.__set__(key, value)
 
+    def get(self, key):
+        return self.__getitem__(key)
+
+    @rate_limited(RATE_LIMIT)
+    def set(self, key, value=None):
+        self.__set__(key, value)
+
+    @rate_limited(RATE_LIMIT, important=False)
+    def update(self, key, value=None):
+        self.__set__(key, value)
+
+    @rate_limited(RATE_LIMIT)
     def push(self, key, value):
         try:
             self.meteorClient.call('workers.update', [self.id, self.token, {
@@ -386,6 +405,7 @@ class Worker(object):
         except Exception as e:
             print('error ocurred during setting ' + key)
 
+    @rate_limited(RATE_LIMIT)
     def pull(self, key, value):
         try:
             self.meteorClient.call('workers.update', [self.id, self.token, {
@@ -431,52 +451,50 @@ class Worker(object):
             self.remove_task(task)
 
     def add_task(self, task):
-        taskId = task._id
-        if task and task.widgetId and self.is_widget_registered(task.widgetId):
-            widget = self.get_registered_widget(task.widgetId)
+        taskId = task.id
+        if task and task.get('widgetId') and self.is_widget_registered(task.get('widgetId')):
+            widget = self.get_registered_widget(task.get('widgetId'))
             task_processor = widget.get_task_processor()
             if task_processor:
                 try:
-                    #task['status'] = {"stage":'-', "running": False, "error":'', "progress":-1}
-                    if not 'autoRestart' in task['tags'] and task['status.running'] == True:
-                        task['cmd'] = ''
-                        task['status.stage'] = 'interrupted'
-                        task['status.running'] = False
-                        task['status.error'] = 'worker restarted unexpectedly.'
-                    if 'ing' in task['status.stage']:
-                        task['status.stage'] = '-'
+                    #task.set('status', {"stage":'-', "running": False, "error":'', "progress":-1})
+                    if not 'autoRestart' in task.get('tags') and task.get('status.running') == True:
+                        task.set('cmd', '')
+                        task.set('status.stage', 'interrupted')
+                        task.set('status.running', False)
+                        task.set('status.error', 'worker restarted unexpectedly.')
+                    if 'ing' in task.get('status.stage'):
+                        task.set('status.stage', '-')
                     tp = task_processor(task, widget, self)
                 except Exception as e:
                     traceback.print_exc()
-                    task['status'] = task['status'] or {}
-                    task['status.running'] = False
-                    task['status.error'] = traceback.format_exc()
-                    task['cmd'] = ''
-                    task['visible2worker'] = False
+                    task.set('status', task.get('status') or {})
+                    task.set('status.running', False)
+                    task.set('status.error', traceback.format_exc())
+                    task.set('cmd', '')
+                    task.set('visible2worker', False)
                 else:
                     if tp:
                         if not self.workTasks.has_key(taskId):
-                            print('add task {} to {}'.format(taskId, self.id))
-                            if not task.parent:
+                            #print('add task {} to {}'.format(taskId, self.id))
+                            if not task.get('parent'):
                                 self.workTasks[taskId] = task
                                 for t in self.workTasks.values():
-                                    if t.parent == task._id:
+                                    if t.parent == task.id:
                                         task.subtasks.add(t)
                                         if t.processor and t.processor.running:
-                                            if not task.cmd or task.cmd == '':
-                                                task.cmd = 'run'
-                            elif self.workTasks.has_key(task.parent):
+                                            if not task.get('cmd') or task.get('cmd') == '':
+                                                task.set('cmd','run')
+                            elif self.workTasks.has_key(task.get('parent')):
                                 self.workTasks[taskId] = task
-                                self.workTasks[task.parent].subtasks.add(task)
+                                self.workTasks[task.get('parent')].subtasks.add(task)
                             else:
-                                task['status.stage'] = 'ignored'
-                                task[
-                                    'status.error'] = 'parent task is not in the available to worker'
-                                task['visible2worker'] = False
-                                print(
-                                    'ignore task {}/{}, disable it from worker'.format(task.name, task._id))
+                                task.set('status.stage', 'ignored')
+                                task.set('status.error', 'parent task is not in the available to worker')
+                                task.set('visible2worker', False)
+                                print('ignore task {}/{}, disable it from worker'.format(task.get('name'), task.id))
                     else:
-                        task['status.error'] = 'no task processor defined.'
+                        task.set('status.error', 'no task processor defined.')
                         return None
                 if self.workTasks.has_key(taskId):
                     self.workTasks[taskId].processor.on_update(
@@ -486,15 +504,15 @@ class Worker(object):
                     self.workTasks[taskId].processor.on_remove(
                         self.remove_task)
                     self.execute_task_cmd(
-                        self.workTasks[taskId], 'cmd', task.cmd)
-                    # if task['cmd'] == 'run':
+                        self.workTasks[taskId], 'cmd', task.get('cmd'))
+                    # if task.get('cmd') == 'run':
                     #    self.run_task(self.workTasks[taskId])
                     return self.workTasks[taskId]
             else:
                 print('widget task processor is not available.')
         else:
             if task:
-                task['visible2worker'] = False
+                task.set('visible2worker', False)
             print("widget is not registered: taskid=" + taskId)
 
     def remove_task(self, task):
@@ -505,15 +523,15 @@ class Worker(object):
             if task.processor.running:
                 task.processor.stop()
             # remove this task from parent task
-            if task.parent and self.workTasks.has_key(task.parent):
-                if task in self.workTasks[task.parent].subtasks:
-                    self.workTasks[task.parent].subtasks.remove(task)
+            if task.get('parent') and self.workTasks.has_key(task.get('parent')):
+                if task in self.workTasks[task.get('parent')].subtasks:
+                    self.workTasks[task.get('parent')].subtasks.remove(task)
 
             del self.workTasks[task.id]
             print('remove task {} from widget {}'.format(task.id, self.id))
 
     def execute_task_cmd(self, task, key, cmd):
-        self['cmd'] = ''
+        self.set('cmd', '')
         if cmd == 'run':
             print('---run task---')
             self.run_task(task)
@@ -522,7 +540,7 @@ class Worker(object):
             self.stop_task(task)
 
     def execute_worker_cmd(self, cmd):
-        self['cmd'] = ''
+        self.set('cmd', '')
         if cmd == 'run':
             self.start_task_threads()
         elif cmd == 'stop':
@@ -535,7 +553,7 @@ class Worker(object):
                 self.workTasks[id].processor.start()
             else:
                 self.taskQueue.put(id)
-                task['status.stage'] = 'queued'
+                task.set('status.stage', 'queued')
                 print('task Qsize:' + str(self.taskQueue.qsize()))
 
     def stop_task(self, task):
@@ -552,31 +570,29 @@ class Worker(object):
                 break
             try:
                 taskId = self.taskQueue.get()
-                if self['status'] != 'running':
-                    self['status'] = 'running'
+                if self.get('status') != 'running':
+                    self.set('status', 'running')
                 if self.workTasks.has_key(taskId):
                     task = self.workTasks[taskId]
                     if task.processor:
-                        if not task.parent:
+                        if not task.get('parent'):
                             task.processor.start()
-                        elif task.parent and self.workTasks.has_key(task.parent):
-                            ptask = self.workTasks[task.parent]
+                        elif task.get('parent') and self.workTasks.has_key(task.get('parent')):
+                            ptask = self.workTasks[task.get('parent')]
                             if ptask.processor and not ptask.processor.running:
-                                task['status.stage'] = 'waiting'
+                                task.set('status.stage', 'waiting')
                                 ptask.processor.start()
                             task.processor.start()
                         else:
-                            task['status.stage'] = 'ignored'
-                            task[
-                                'status.error'] = 'parent task is not in the available to worker'
-                            task['visible2worker'] = False
-                            print(
-                                'ignore task {}/{}, disable it from worker'.format(task.name, task._id))
+                            task.set('status.stage', 'ignored')
+                            task.set('status.error', 'parent task is not in the available to worker')
+                            task.set('visible2worker', False)
+                            print('ignore task {}/{}, disable it from worker'.format(task.get('name'), task.id))
                             # task.processor.start()
                 self.taskQueue.task_done()
 
             except Empty:
-                self['status'] = 'ready'
+                self.set('status', 'ready')
                 time.sleep(1)
             except:
                 traceback.print_exc()
@@ -591,7 +607,7 @@ class Worker(object):
                     task.processor.stop()
         except Exception as e:
             pass
-        self['status'] = 'stopped'
+        self.set('status', 'stopped')
         for subscription in self.meteorClient.subscriptions.copy():
             self.meteorClient.unsubscribe(subscription)
 
@@ -667,7 +683,7 @@ class ConnectionManager():
                 if fields.has_key('worker') and fields['worker'] == self.worker.id:
                     task = Task(self.client.find_one('tasks', selector={
                                 '_id': id}), self.worker, self.client)
-                    if task._id:
+                    if task.id:
                         self.worker.add_task(task)
 
         elif collection == 'users':
@@ -676,7 +692,7 @@ class ConnectionManager():
             # widget = fields#self.client.find_one('widgets', selector={'name':
             widget_ = Widget(self.client.find_one(
                 'widgets', selector={'_id': id}), self.client)
-            if widget_._id:
+            if widget_.id:
                 self.worker.register_widget(widget_)
                 if not 'tasks.worker' in self.client.subscriptions:
                     self.client.subscribe(
@@ -698,7 +714,7 @@ class ConnectionManager():
                                 updateCallback(task, key, value)
                             except Exception as e:
                                 traceback.print_exc()
-                                task['status.error'] = traceback.format_exc()
+                                task.set('status.error', traceback.format_exc())
 
                 for key, value in cleared.items():
                     if task.processor.updateCallbackDict.has_key(key):
@@ -707,7 +723,7 @@ class ConnectionManager():
                                 updateCallback(task, key, value)
                             except Exception as e:
                                 traceback.print_exc()
-                                task['status.error'] = traceback.format_exc()
+                                task.set('status.error', traceback.format_exc())
 
             else:
                 if fields.has_key('worker') and fields['worker'] == self.worker.id:
@@ -717,7 +733,7 @@ class ConnectionManager():
         if collection == 'widgets':
             widget_ = Widget(self.client.find_one(
                 'widgets', selector={'_id': id}), self.client)
-            if widget_._id:
+            if widget_.id:
                 self.worker.register_widget(widget_)
 
             if fields.has_key('workers'):
