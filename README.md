@@ -32,19 +32,41 @@ d = dai.Worker(worker_id='iJX99fYEdfasigEAd',
                dev_mode=True)
 d.start()
 ```
-And you will see the worker running on the platform, now you are ready to go, try to create a widget and add the worker you just created. In the "CODE" tab in a widget editor, you can add one code file named "__init__.py" with the type "python". By default, it will be like this:
+And you will see the worker running on the platform, now you are ready to go, try to create a widget and add the worker you just created. In the "Code" tab in a widget editor, you can add one code file named "__init__.py" with the type "python" which will perform the actuall task on the worker node.
+
+Here is an example of task processor code:
 ```python
+import time
 from dai.taskProcessors import ThreadedTaskProcessor
 
-class MyTaskProcessor(ThreadedTaskProcessor):
-    def process_task(self, *args):
-        self.task.set("status.info", "hello from worker")
-        self.task.set("status.error", "this is a fake error")
-        time.sleep(10)
-        self.task.set("status.stage", "done")
+def process_task(task, *args):
+    # start task
+    task.set("status.stage", "started")
+
+    # run your task code with config and input
+    # get task config and input
+    print(task.get("config"))
+    print(task.get("input"))
+
+    # use "set" for important information such as error and results
+    task.set({"status.error":"this is a fake error",
+              "status.info":"error"})
+
+    # use "update" for fast updating intermediate status
+    task.update({"status.info": "hello from worker",
+                 "status.progress": 50})
+
+    time.sleep(3)
+
+    # save result in "output"
+    task.set("output.result", 100)
+
+    # finish task
+    task.set("status.progress", 100)
+    task.set("status.stage", "done")
 
 if __name__ == "__worker__":
-    TASK_PROCESSOR = MyTaskProcessor(TASK, WIDGET, WORKER)
+    TASK_PROCESSOR = ThreadedTaskProcessor(TASK, WIDGET, WORKER, process=process_task)
 ```
 
 Just fill your code which does some job into `process_task` function. With self.task, you can get the dictionaries which stores the `config`, `input` and `output`. The basic guideline is you let the store the configurations or parameters in `config` dictionary, the file path or the url of your data you want to process in `input` dictionary, after executing your task, fill `output` dictionary with the output.
