@@ -17,7 +17,7 @@ class ProgressTracker(keras.callbacks.Callback):
         if self.task.abort.is_set():
             self.task.set('status.error', 'interrupted')
             self.model.stop_training = True
-            raise Exception('stopped by user')
+            raise Exception('interrupted')
 
     def on_batch_end(self, batch, logs={}):
         info = ''
@@ -29,8 +29,10 @@ class ProgressTracker(keras.callbacks.Callback):
             info += "{}: {}\n".format(k,vstr)
         self.elapsed_time = time.time()-self.start_time
         info += "elapsed_time: {:.2f}s".format(self.elapsed_time)
-        self.task.update('status.info', info)
-        self.task.update('status.progress', batch%100)
+        self.task.update({
+            'status.info': info,
+            'status.progress': batch%100
+        })
 
     def on_epoch_begin(self, epoch, logs={}):
         self.task.set('status.stage', 'epoch #'+str(epoch))
