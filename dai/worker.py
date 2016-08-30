@@ -16,6 +16,7 @@ except ImportError:
 from subprocess import Popen, PIPE, STDOUT
 from utils import NonBlockingStreamReader, Resource
 from utils import rate_limited
+from MeteorFiles import Uploader
 
 RATE_LIMIT = 5
 
@@ -136,6 +137,11 @@ class Task(object):
                                    self.id, self.worker.id, self.worker.token, {'$pull': vdict}])
         except Exception as e:
             print('error ocurred during setting ' + key)
+
+    def upload(self, filePath):
+        uploader = Uploader(self.meteorClient, 'files', transport='http', verbose=True)
+        meta = {"taskId":self.id, "widgetId":self.get('widgetId'), "worker":self.get('worker')}
+        uploader.upload(filePath, meta=meta)
 
 
 class Widget(object):
@@ -650,6 +656,8 @@ class ConnectionManager():
         if not 'workers.worker' in self.client.subscriptions:
             self.client.subscribe(
                 'workers.worker', [self.worker.id, self.worker.token])
+        if not 'files.worker' in self.client.subscriptions:
+            self.client.subscribe('files.worker', [self.worker.id, self.worker.token]);
 
     def logged_in(self, data):
         self.userId = data['id']
@@ -667,6 +675,8 @@ class ConnectionManager():
             else:
                 raise Exception('Failed to find the worker with id:{} token{}'.format(
                     self.worker.id, self.worker.token))
+        if subscription == 'files.worker':
+            print('files of this worker SUBSCRIBED-')
 
         if subscription == 'widgets.worker':
             print('widgets of this worker SUBSCRIBED-')
