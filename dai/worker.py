@@ -7,6 +7,7 @@ import traceback
 import os
 import platform
 import argparse
+import requests
 
 from MeteorClient import MeteorClient
 try:
@@ -140,9 +141,87 @@ class Task(object):
 
     def upload(self, filePath):
         uploader = Uploader(self.meteorClient, 'files', transport='http', verbose=True)
-        meta = {"taskId":self.id, "widgetId":self.get('widgetId'), "worker":self.get('worker')}
+        meta = {"taskId":self.id, "widgetId":self.get('widgetId'), "workerId":self.worker.id, 'workerToken': self.worker.token}
         uploader.upload(filePath, meta=meta)
 
+    def files(self, selector={}):
+        selector['meta.taskId'] = self.id
+        return self.find('files', selector)
+
+    def file(self, selector={}):
+        selector['meta.taskId'] = self.id
+        return self.find_one('files', selector)
+
+    def download(self, file):
+        if isinstance(file, (str, unicode)):
+            fileObj = self.meteorClient.find_one('files', {'_id': file})
+        else:
+            fileObj = file
+        if fileObj:
+            baseurl = self.meteorClient.ddp_client.url
+            assert baseurl.startswith('ws://') and baseurl.endswith('/websocket')
+            if not fileObj.has_key('version'):
+                fileObj['version'] = 'original'
+            if fileObj.has_key('extension') and len(fileObj['extension'])>0:
+                ext = '.' + fileObj['extension']
+            else:
+                ext = ''
+            fileObj['ext'] = ext
+            downloadUrl = 'http' + baseurl[2:-10] + "{_downloadRoute}/{_collectionName}/{_id}/{version}/#{_id}#{ext}".format(**fileObj)
+            if not os.path.exists(self.processor.workdir):
+                os.makedirs(self.processor.workdir)
+            save_path = os.path.join(self.processor.workdir, fileObj['name'])
+            r = requests.get(downloadUrl, stream=True)
+            with open(save_path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=1024):
+                    if chunk: # filter out keep-alive new chunks
+                        f.write(chunk)
+            return save_path
+
+    def find(self, collection, selector={}):
+        '''
+        support multi-level selector
+        '''
+        results = []
+        for _id, doc in self.meteorClient.collection_data.data.get(collection, {}).items():
+            doc.update({'_id': _id})
+            if selector == {}:
+                results.append(doc)
+            for key, value in selector.items():
+                if '.' in key:
+                    keys = key.split('.')
+                    v = doc
+                    for k in keys:
+                        if k in v:
+                            v = v[k]
+                        else:
+                            break
+                    if v == value:
+                        results.append(doc)
+                else:
+                    if key in doc and doc[key] == value:
+                        results.append(doc)
+        return results
+
+    def find_one(self, collection, selector={}):
+        for _id, doc in self.meteorClient.collection_data.data.get(collection, {}).items():
+            doc.update({'_id': _id})
+            if selector == {}:
+                return doc
+            for key, value in selector.items():
+                if '.' in key:
+                    keys = key.split('.')
+                    v = doc
+                    for k in keys:
+                        if k in v:
+                            v = v[k]
+                        else:
+                            break
+                    if v == value:
+                        return doc
+                else:
+                    if key in doc and doc[key] == value:
+                        return doc
 
 class Widget(object):
 
