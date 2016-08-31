@@ -13,7 +13,7 @@ except ImportError:
 
 class TaskProcessor(object):
 
-    def __init__(self, task, widget, worker, make_workdir=False):
+    def __init__(self, task, widget, worker, make_workdir=True, save_widget_code=True):
         self.widget = widget
         self.task = task
         task.processor = self
@@ -40,7 +40,17 @@ class TaskProcessor(object):
         self.removeCallbackList = []
         self.requirements = {}
         self.resourcesOcuppied = {}
+        if save_widget_code:
+            self.save_widget_code()
         self.init()
+
+    def save_widget_code(self, name):
+        if self.widget.get('code_snippets'):
+            self.make_workdir()
+            for k in self.widget.get('code_snippets'):
+                code = self.widget.get('code_snippets')[k]
+                with open(os.path.join(self.workdir, code['name']), 'w') as f:
+                    f.write(code['content'])
 
     def init(self):
         pass
