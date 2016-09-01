@@ -1,3 +1,4 @@
+from __future__ import print_function
 import time
 import sys
 import logging
@@ -21,7 +22,6 @@ from MeteorFiles import Uploader
 
 RATE_LIMIT = 5
 
-TASK_INNER_PROPERTIES = ['taskDoc', 'id', 'processor', 'worker', 'subtasks', 'meteorClient', 'has_key', 'abort']
 class Task(object):
 
     def __init__(self, taskDoc, worker, meteorClient):
@@ -32,8 +32,13 @@ class Task(object):
         self.has_key = self.taskDoc.has_key
         if self.taskDoc.has_key('_id'):
             self.id = self.taskDoc['_id']
+        assert self.id
+        self.widget = self.worker.get_registered_widget(self.get('widgetId'))
+        assert self.widget
+        if self.get('parent') is None or self.get('parent') == '':
+            self.workdir = os.path.abspath(os.path.join(self.widget.workdir, 'task-'+self.id))
         else:
-            self.id = None
+            self.workdir = os.path.abspath(os.path.join(self.widget.workdir, 'task-'+self.get('parent'), 'task-'+self.id))
         self.processor = None
         self.subtasks = set()
 
@@ -53,6 +58,7 @@ class Task(object):
             return self.taskDoc[key]
         else:
             return None
+
     def __set__(self, key, value=None):
         assert (type(key) is str and not value is None)or (type(key) is dict and value is None)
         if key == 'running':
@@ -87,29 +93,6 @@ class Task(object):
     def __setitem__(self, key, value):
         return self.__set__(key,value)
 
-    def __getattr__(self, attr):
-        if attr in TASK_INNER_PROPERTIES:
-            return super(Task, self).__getattribute__(attr)
-        elif attr == 'running':
-            if self.processor:
-                return self.processor.running
-            else:
-                return False
-        if self.taskDoc.has_key(attr):
-            return self.taskDoc[attr]
-        else:
-            return None
-
-    @rate_limited(RATE_LIMIT)
-    def __setattr__(self, key, value):
-        if key in TASK_INNER_PROPERTIES:
-            super(Task, self).__setattr__(key, value)
-        else:
-            self.__set__(key,value)
-
-    def __delattr__(self, item):
-        self.__delitem__(item)
-
     def get(self, key):
         return self.__getitem__(key)
 
@@ -139,20 +122,29 @@ class Task(object):
         except Exception as e:
             print('error ocurred during setting ' + key)
 
-    def upload(self, filePath):
-        uploader = Uploader(self.meteorClient, 'files', transport='http', verbose=True)
+    def upload(self, filePath, verbose=False):
+        uploader = Uploader(self.meteorClient, 'files', transport='http', verbose=verbose)
         meta = {"taskId":self.id, "widgetId":self.get('widgetId'), "workerId":self.worker.id, 'workerToken': self.worker.token}
         uploader.upload(filePath, meta=meta)
 
-    def files(self, selector={}):
-        selector['meta.taskId'] = self.id
-        return self.find('files', selector)
+    def files(self, **kwargs):
+        files = self.find('files', {"_id" : { "$in" : self.get("files") }})
+        if len(kwargs)>0:
+            files = self.find(files, kwargs)
+        return files
 
-    def file(self, selector={}):
-        selector['meta.taskId'] = self.id
-        return self.find_one('files', selector)
+    def file(self, name=None, id=None, **kwargs):
+        selector={}
+        for k,d in kwargs.items():
+            selector[k] = d
+        if id:
+            selector['_id'] = id
+        if name:
+            selector['name'] = name
+        return self.find_one(self.files(), selector)
 
-    def download(self, file):
+    def download(self, file, verbose=False):
+        assert file, 'please provide a file id or a file object to download'
         if isinstance(file, (str, unicode)):
             fileObj = self.meteorClient.find_one('files', {'_id': file})
         else:
@@ -168,14 +160,21 @@ class Task(object):
                 ext = ''
             fileObj['ext'] = ext
             downloadUrl = 'http' + baseurl[2:-10] + "{_downloadRoute}/{_collectionName}/{_id}/{version}/#{_id}#{ext}".format(**fileObj)
-            if not os.path.exists(self.processor.workdir):
-                os.makedirs(self.processor.workdir)
-            save_path = os.path.join(self.processor.workdir, fileObj['name'])
+            if not os.path.exists(self.workdir):
+                os.makedirs(self.workdir)
+            if verbose:
+                print('downloading '+ downloadUrl)
+            save_path = os.path.join(self.workdir, fileObj['name'])
             r = requests.get(downloadUrl, stream=True)
+
             with open(save_path, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=1024):
                     if chunk: # filter out keep-alive new chunks
                         f.write(chunk)
+                        if verbose:
+                            print('.', end='')
+            if verbose:
+                print('saved to '+ save_path)
             return save_path
 
     def find(self, collection, selector={}):
@@ -183,7 +182,13 @@ class Task(object):
         support multi-level selector
         '''
         results = []
-        for _id, doc in self.meteorClient.collection_data.data.get(collection, {}).items():
+        if isinstance(collection, str):
+            collection_items = self.meteorClient.collection_data.data.get(collection, {}).items()
+        elif isinstance(collection, list):
+            collection_items = [(doc['_id'],doc) for doc in collection]
+        else:
+            raise Exception('unsupported collection type')
+        for _id, doc in collection_items:
             doc.update({'_id': _id})
             if selector == {}:
                 results.append(doc)
@@ -199,12 +204,24 @@ class Task(object):
                     if v == value:
                         results.append(doc)
                 else:
-                    if key in doc and doc[key] == value:
+                    if isinstance(value, dict):
+                        if value.has_key('$in') and isinstance(value['$in'], list):
+                            if doc[key] in value['$in']:
+                                results.append(doc)
+                                break
+                    elif key in doc and doc[key] == value:
                         results.append(doc)
+
         return results
 
     def find_one(self, collection, selector={}):
-        for _id, doc in self.meteorClient.collection_data.data.get(collection, {}).items():
+        if isinstance(collection, str):
+            collection_items = self.meteorClient.collection_data.data.get(collection, {}).items()
+        elif isinstance(collection, list):
+            collection_items = [(doc['_id'],doc) for doc in collection]
+        else:
+            raise Exception('unsupported collection type')
+        for _id, doc in collection_items:
             doc.update({'_id': _id})
             if selector == {}:
                 return doc
@@ -220,19 +237,37 @@ class Task(object):
                     if v == value:
                         return doc
                 else:
-                    if key in doc and doc[key] == value:
+                    if isinstance(value, dict):
+                        if value.has_key('$in') and isinstance(value['$in'], dict):
+                            for k in value['$in']:
+                                if doc[k] in value['$in'][k]:
+                                    return doc
+                    elif key in doc and doc[key] == value:
                         return doc
+
+    def save(self, filename=None):
+        import ejson
+        if not os.path.exists(self.workdir):
+            os.makedirs(self.workdir)
+        if filename is None:
+            filename = 'task.ejson'
+        with open(os.path.join(self.workdir, filename), 'w') as f:
+            f.write(ejson.dumps(self.taskDoc))
 
 class Widget(object):
 
-    def __init__(self, widgetDoc, meteorClient):
+    def __init__(self, widgetDoc, worker, meteorClient):
         self.widgetDoc = widgetDoc
         self.meteorClient = meteorClient
+        self.worker = worker
         self.has_key = self.widgetDoc.has_key
         if self.widgetDoc.has_key('_id'):
             self.id = self.widgetDoc['_id']
         else:
-            self.id = None
+            raise Exception('invalid widgetDoc')
+        self.workdir = os.path.join(self.worker.workdir, 'widget-'+self.id)
+        if not os.path.exists(self.workdir):
+            os.makedirs(self.workdir)
 
     def __getitem__(self, key):
         if not self.widgetDoc:
@@ -309,7 +344,7 @@ class Worker(object):
         self.workerVersion = "0.0"
         self.logger = logging.getLogger('worker')
 
-        self.workdir = os.path.abspath(os.path.join(workdir, worker_id))
+        self.workdir = os.path.abspath(os.path.join(workdir, 'worker-'+worker_id))
         if not os.path.exists(self.workdir):
             os.makedirs(self.workdir)
         self.init()
@@ -409,12 +444,15 @@ class Worker(object):
         id = widget.id
         print('register widget: ' + id)
         if widget.get('mode') == 'development':
-            widgetWorkdir = os.path.join(self.workdir, id)
-            if not os.path.exists(widgetWorkdir):
-                os.makedirs(widgetWorkdir)
             self.devWidgets[id] = widget
             if self.productionWidgets.has_key(id):
                 del self.productionWidgets[id]
+            if widget.get('code_snippets'):
+                for k in widget.get('code_snippets').keys():
+                    k = k.replace('.', '_')
+                    code = widget.get('code_snippets')[k]
+                    with open(os.path.join(widget.workdir, code['name']), 'w') as f:
+                        f.write(code['content'])
 
         if widget.get('mode') == 'production':
             self.productionWidgets[id] = widget
@@ -565,7 +603,7 @@ class Worker(object):
                             if not task.get('parent'):
                                 self.workTasks[taskId] = task
                                 for t in self.workTasks.values():
-                                    if t.parent == task.id:
+                                    if t.get('parent') == task.id:
                                         task.subtasks.add(t)
                                         if t.processor and t.processor.running:
                                             if not task.get('cmd') or task.get('cmd') == '':
@@ -780,7 +818,7 @@ class ConnectionManager():
         elif collection == 'widgets':
             # widget = fields#self.client.find_one('widgets', selector={'name':
             widget_ = Widget(self.client.find_one(
-                'widgets', selector={'_id': id}), self.client)
+                'widgets', selector={'_id': id}), self.worker, self.client)
             if widget_.id:
                 self.worker.register_widget(widget_)
                 if not 'tasks.worker' in self.client.subscriptions:
@@ -821,7 +859,7 @@ class ConnectionManager():
                 #print('task is not in worktask list: ' + id)
         if collection == 'widgets':
             widget_ = Widget(self.client.find_one(
-                'widgets', selector={'_id': id}), self.client)
+                'widgets', selector={'_id': id}), self.worker, self.client)
             if widget_.id:
                 self.worker.register_widget(widget_)
 

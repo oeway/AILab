@@ -13,7 +13,7 @@ except ImportError:
 
 class TaskProcessor(object):
 
-    def __init__(self, task, widget, worker, make_workdir=True, save_widget_code=True):
+    def __init__(self, task, widget, worker, save_widget_code=False):
         self.widget = widget
         self.task = task
         task.processor = self
@@ -22,32 +22,30 @@ class TaskProcessor(object):
         assert not self.task is None
         self.isSubTask = bool(self.task.get('parent'))
         self.id = self.task.id
-        self.parentId = None if not task.get('parent') else task.get('parent')
+        self.parent = None if not task.get('parent') else task.get('parent')
         FORMAT = '%(asctime)-15s %(clientip)s %(user)-8s %(message)s'
         self.logger = logging.getLogger('taskProcessor')
         self.abort = self.task.abort
         self.exception = None
         self.running = False
-        if self.task.get('parent') is None or self.task.get('parent') == '':
-            self.workdir = os.path.abspath(os.path.join(
-                self.worker.workdir, self.widget.id, self.id))
-        else:
-            self.workdir = os.path.abspath(os.path.join(
-                self.worker.workdir, self.widget.id, self.task.get('parent'), self.id))
-        if make_workdir:
-            self.make_workdir()
+        self.workdir = self.task.workdir
+        self.make_workdir()
         self.updateCallbackDict = {}
         self.removeCallbackList = []
         self.requirements = {}
         self.resourcesOcuppied = {}
         if save_widget_code:
             self.save_widget_code()
+        self.task.save()
         self.init()
 
-    def save_widget_code(self, name):
+    def save_widget_code(self, names=None):
         if self.widget.get('code_snippets'):
             self.make_workdir()
-            for k in self.widget.get('code_snippets'):
+            if names is None:
+                names = self.widget.get('code_snippets').keys()
+            for k in names:
+                k = k.replace('.', '_')
                 code = self.widget.get('code_snippets')[k]
                 with open(os.path.join(self.workdir, code['name']), 'w') as f:
                     f.write(code['content'])
@@ -102,6 +100,7 @@ class TaskProcessor(object):
         print('starting...')
         try:
             self.before()
+            self.task.save()
             self.run(resources)
         except Exception as e:
             print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
@@ -142,7 +141,7 @@ class TaskProcessor(object):
                 self.task.set('status.progress', 0)
             if 'ing' in self.task.get('status.stage'):
                 self.task.set('status.stage', 'exited')
-
+            self.task.save()
         except Exception as e:
             print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
             traceback.print_exc()
