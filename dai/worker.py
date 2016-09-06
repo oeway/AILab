@@ -620,12 +620,6 @@ class Worker(object):
                         task.set('status.error', 'no task processor defined.')
                         return None
                 if self.workTasks.has_key(taskId):
-                    self.workTasks[taskId].processor.on_update(
-                        'cmd', self.execute_task_cmd)
-                    self.workTasks[taskId].processor.on_update(
-                        'worker', self.task_worker_changed)
-                    self.workTasks[taskId].processor.on_remove(
-                        self.remove_task)
                     self.execute_task_cmd(
                         self.workTasks[taskId], 'cmd', task.get('cmd'))
                     # if task.get('cmd') == 'run':
@@ -835,19 +829,29 @@ class ConnectionManager():
             if self.worker.workTasks.has_key(id):
                 task = self.worker.workTasks[id]
                 for key, value in fields.items():
-                    if task.processor.updateCallbackDict.has_key(key):
-                        for updateCallback in task.processor.updateCallbackDict[key]:
+                    if key == 'cmd':
+                        self.worker.execute_task_cmd(task, key, value)
+                    elif key == 'worker':
+                        self.worker.task_worker_changed(task, key, value)
+
+                    if task.processor.changeCallbackDict.has_key(key):
+                        for changeCallback in task.processor.changeCallbackDict[key]:
                             try:
-                                updateCallback(task, key, value)
+                                changeCallback(task, key, value)
                             except Exception as e:
                                 traceback.print_exc()
                                 task.set('status.error', traceback.format_exc())
 
                 for key, value in cleared.items():
-                    if task.processor.updateCallbackDict.has_key(key):
-                        for updateCallback in task.processor.updateCallbackDict[key]:
+                    if key == 'cmd':
+                        self.worker.execute_task_cmd(task, key, value)
+                    elif key == 'worker':
+                        self.worker.task_worker_changed(task, key, value)
+
+                    if task.processor.changeCallbackDict.has_key(key):
+                        for changeCallback in task.processor.changeCallbackDict[key]:
                             try:
-                                updateCallback(task, key, value)
+                                changeCallback(task, key, value)
                             except Exception as e:
                                 traceback.print_exc()
                                 task.set('status.error', traceback.format_exc())
@@ -875,6 +879,7 @@ class ConnectionManager():
         if collection == 'tasks':
             if self.worker.workTasks.has_key(id):
                 task = self.worker.workTasks[id]
+                self.worker.remove_task(task)
                 for cb in task.processor.removeCallbackList:
                     cb(task)
 

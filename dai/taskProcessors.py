@@ -30,7 +30,7 @@ class TaskProcessor(object):
         self.running = False
         self.workdir = self.task.workdir
         self.make_workdir()
-        self.updateCallbackDict = {}
+        self.changeCallbackDict = {}
         self.removeCallbackList = []
         self.requirements = {}
         self.resourcesOcuppied = {}
@@ -53,11 +53,11 @@ class TaskProcessor(object):
     def init(self):
         pass
 
-    def on_update(self, field, callback):
-        if self.updateCallbackDict.has_key(field):
-            self.updateCallbackDict[field].append(callback)
+    def on_change(self, field, callback):
+        if self.changeCallbackDict.has_key(field):
+            self.changeCallbackDict[field].append(callback)
         else:
-            self.updateCallbackDict[field] = [callback]
+            self.changeCallbackDict[field] = [callback]
 
     def get_widget_code(self, name):
         name = name.replace('.', '_')
