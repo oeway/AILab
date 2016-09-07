@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='dai',
-      version='0.3.36',
+      version='0.3.37',
       description='python worker for distributedAI',
       url='http://github.com/oeway/distributedAI',
       author='Wei OUYANG',
@@ -10,5 +10,6 @@ setup(name='dai',
       packages=['dai'],
       install_requires=[
           'python-meteor',
+          'sh'
       ],
       zip_safe=False)

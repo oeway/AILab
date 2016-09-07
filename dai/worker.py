@@ -9,6 +9,7 @@ import os
 import platform
 import argparse
 import requests
+from datetime import datetime
 
 from MeteorClient import MeteorClient
 try:
@@ -16,8 +17,8 @@ try:
 except ImportError:
     from queue import Queue, Empty  # python 3.x
 from subprocess import Popen, PIPE, STDOUT
-from utils import NonBlockingStreamReader, Resource
-from utils import rate_limited
+from utils import NonBlockingStreamReader
+from utils import Metrics, rate_limited
 from MeteorFiles import Uploader
 
 RATE_LIMIT = 5
@@ -348,8 +349,11 @@ class Worker(object):
         if not os.path.exists(self.workdir):
             os.makedirs(self.workdir)
         self.init()
-        self.prepare_resources()
-
+        self.get_system_info()
+        try:
+            self.get_gpu_info()
+        except Exception as e:
+            print('gpu info is not available.')
         self.connectionManager = ConnectionManager(
             server_url=server_url, worker=self)
         self.meteorClient = self.connectionManager.client
@@ -363,33 +367,37 @@ class Worker(object):
     def init(self):
         pass
 
-    def prepare_resources(self):
-        self.get_cpu_thread_pool()
-        self.get_platform_info()
+    def get_system_info(self):
+        self.resources['cpu_thread'] = self.cpuThreadCount
+        self.resources['platform'] ={
+            'uname': ', '.join(platform.uname()),
+            'machine':  platform.machine(),
+            'system': platform.system(),
+            'processor': platform.processor(),
+            'node': platform.node()}
         try:
-            self.get_gpu_resources()
+            from sh import which
+            exe_checklist = ['nvcc', 'java', 'lua', 'qstat', 'squeue']
+            self.resources['exe'] = {}
+            for e in exe_checklist:
+                self.resources['exe'][e] = which(e)
+
         except Exception as e:
-            print('error occured during getting gpu resources.')
+            raise
 
-    def get_cpu_thread_pool(self):
-        self.resources['cpu_thread'] = Resource(
-            'cpu_thread', 'cpu_thread#main', self.cpuThreadCount)
+        self.update_system_info()
 
-    def get_platform_info(self):
-        self.resources['platform'] = Resource('platform', 'platform#', 1)
-        self.resources['platform'].features[
-            'uname'] = ', '.join(platform.uname())
-        self.resources['platform'].features['machine'] = platform.machine()
-        self.resources['platform'].features['system'] = platform.system()
-        self.resources['platform'].features['processor'] = platform.processor()
-        self.resources['platform'].features['node'] = platform.node()
+    def update_system_info(self):
+        self.resources['date_time'] =  str(datetime.now())
 
-    def get_gpu_resources(self):
+    def get_gpu_info(self):
         from device_query import get_devices, get_nvml_info
         devices = get_devices()
+        gpus = {}
+        self.resources['gpu'] = gpus
         for i, device in enumerate(devices):
-            gpuResource = Resource('gpu', 'gpu#' + str(i))
-            self.resources['gpu#' + str(i)] = gpuResource
+            gpuInfo = gpus['gpu' + str(i)] or {}
+            gpus['gpu' + str(i)] = gpuInfo
             for name, t in device._fields_:
                 if name not in [
                         'name', 'totalGlobalMem', 'clockRate', 'major', 'minor', ]:
@@ -398,46 +406,40 @@ class Worker(object):
                     val = ','.join(str(v) for v in getattr(device, name))
                 else:
                     val = getattr(device, name)
-                gpuResource.features[name] = Metrics(name, val)
+                gpuInfo[name] = val
 
+        self.update_gpu_info()
+
+    def update_gpu_info(self):
+        from device_query import get_devices, get_nvml_info
+        devices = get_devices()
+        gpus = self.resources['gpu']
+        for i, device in enumerate(devices):
+            gpuInfo = gpus['gpu' + str(i)]
             info = get_nvml_info(i)
             if info is not None:
                 if 'memory' in info:
-                    gpuResource.status['Total memory'] = Metrics('Total memory',
-                                                                 info['memory']['total'] / 2**20, 'MB')
-                    gpuResource.status['Used memory'] = Metrics('Used memory',
-                                                                info['memory']['used'] / 2**20, 'MB')
+                    gpuInfo['total_memory'] = Metrics(info['memory']['total'] / 2**20, 'MB')
+                    gpuInfo['used_memory'] = Metrics(info['memory']['used'] / 2**20, 'MB')
                 if 'utilization' in info:
-                    gpuResource.status['Memory utilization'] = Metrics(
-                        'Memory utilization', info['utilization']['memory'], '%')
-                    gpuResource.status['GPU utilization'] = Metrics(
-                        'GPU utilization', info['utilization']['gpu'], '%')
+                    gpuInfo['memory_utilization'] = Metrics(info['utilization']['memory'], '%')
+                    gpuInfo['gpu_utilization'] = Metrics(info['utilization']['gpu'], '%')
                 if 'temperature' in info:
-                    gpuResource.status[
-                        'temperature'] = Metrics('temperature', info['temperature'], 'C')
+                    gpuInfo['temperature'] = Metrics(info['temperature'], 'C')
 
     def worker_monitor(self):
         while not self.connectionManager.ready:
             time.sleep(0.2)
         print('worker monitor thread started.')
-        self.get_gpu_resources()
-        features = ''
-        for k in self.resources:
-            features += self.resources[k].id + ':\n'
-            for f in self.resources[k].features.values():
-                features += str(f) + '\n'
+        self.get_system_info()
+        self.get_gpu_info()
         self.set('version', self.workerVersion)
-        self.set('sysInfo', features)
-        self.set('name', self.resources['platform'].features['node'] + '-' + self.id)
+        self.set('name', self.resources['platform']['node'] + '-' + self.id)
         self.set('status', 'ready')
         while True:
-            self.get_gpu_resources()
-            resources = ''
-            for k in self.resources:
-                resources += self.resources[k].id + ':\n'
-                for s in self.resources[k].status.values():
-                    resources += str(s) + '\n'
-            self.set('resources', resources)
+            self.update_system_info()
+            self.update_gpu_info()
+            self.set('resources', str(self.resources))
             time.sleep(2.0)
 
     def register_widget(self, widget):
@@ -727,19 +729,6 @@ class Worker(object):
         self.set('status', 'stopped')
         for subscription in self.meteorClient.subscriptions.copy():
             self.meteorClient.unsubscribe(subscription)
-
-
-class Metrics():
-
-    def __init__(self, type, value, unit=''):
-        self.type = type
-        self.value = value
-        self.unit = unit
-        self.__repr__ = self.__str__
-
-    def __str__(self):
-        return "{}: {}{}".format(self.type, self.value, self.unit)
-
 
 class ConnectionManager():
 

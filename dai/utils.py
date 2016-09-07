@@ -28,24 +28,15 @@ def rate_limited(period, damping=1.0, important=True):
     return func_wrapper
   return decorate
 
-class Resource(object):
+class Metrics():
 
-    def __init__(self, name, id, total=100):
-        self.id = id
-        self.name = name
-        self.total = total
-        self.allocations = {}
-        self.features = {}
-        self.status = {}
+    def __init__(self, value, unit=''):
+        self.value = value
+        self.unit = unit
+        self.__repr__ = self.__str__
 
-    def allocate(self, task, value):
-        self.left -= value
-        self.allocations[task.id] = value
-
-    def deallocate(self, task):
-        value = self.allocations[task.id]
-        del self.allocations[task.id]
-        self.left += value
+    def __str__(self):
+        return "{}{}".format(self.value, self.unit)
 
 class NonBlockingStreamReader:
 
