@@ -123,9 +123,12 @@ class Task(object):
         except Exception as e:
             print('error ocurred during setting ' + key)
 
+    # TODO: get widget_code
+
     def upload(self, filePath, verbose=False):
         uploader = Uploader(self.meteorClient, 'files', transport='http', verbose=verbose)
         meta = {"taskId":self.id, "widgetId":self.get('widgetId'), "workerId":self.worker.id, 'workerToken': self.worker.token}
+        # TODO: support relative path to task.workdir
         uploader.upload(filePath, meta=meta)
 
     def files(self, **kwargs):
