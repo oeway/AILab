@@ -393,11 +393,13 @@ class Worker(object):
     def get_gpu_info(self):
         from device_query import get_devices, get_nvml_info
         devices = get_devices()
-        gpus = {}
-        self.resources['gpu'] = gpus
+        if not self.resources.has_key('gpu'):
+            self.resources['gpu'] = {}
+        gpus = self.resources['gpu']
         for i, device in enumerate(devices):
-            gpuInfo = gpus['gpu' + str(i)] or {}
-            gpus['gpu' + str(i)] = gpuInfo
+            if not gpus.has_key('gpu' + str(i)):
+                gpus['gpu' + str(i)] = {}
+            gpuInfo = gpus['gpu' + str(i)]
             for name, t in device._fields_:
                 if name not in [
                         'name', 'totalGlobalMem', 'clockRate', 'major', 'minor', ]:
@@ -413,8 +415,12 @@ class Worker(object):
     def update_gpu_info(self):
         from device_query import get_devices, get_nvml_info
         devices = get_devices()
+        if not self.resources.has_key('gpu'):
+            self.resources['gpu'] = {}
         gpus = self.resources['gpu']
         for i, device in enumerate(devices):
+            if not gpus.has_key('gpu' + str(i)):
+                gpus['gpu' + str(i)] = {}
             gpuInfo = gpus['gpu' + str(i)]
             info = get_nvml_info(i)
             if info is not None:
@@ -438,7 +444,10 @@ class Worker(object):
         self.set('status', 'ready')
         while True:
             self.update_system_info()
-            self.update_gpu_info()
+            try:
+                self.update_gpu_info()
+            except Exception as e:
+                pass
             self.set('resources', str(self.resources))
             time.sleep(2.0)
 
