@@ -129,6 +129,7 @@ class Task(object):
         uploader = Uploader(self.meteorClient, 'files', transport='http', verbose=verbose)
         meta = {"taskId":self.id, "widgetId":self.get('widgetId'), "workerId":self.worker.id, 'workerToken': self.worker.token}
         # TODO: support relative path to task.workdir
+        # TODO: also make a copy to worker.datadir for potential further usage
         uploader.upload(filePath, meta=meta)
 
     def files(self, **kwargs):
@@ -147,7 +148,7 @@ class Task(object):
             selector['name'] = name
         return self.find_one(self.files(), selector)
 
-    def download(self, file, verbose=False):
+    def download(self, file, use_cache=True, verbose=False):
         assert file, 'please provide a file id or a file object to download'
         if isinstance(file, (str, unicode)):
             fileObj = self.meteorClient.find_one('files', {'_id': file})
@@ -168,9 +169,23 @@ class Task(object):
                 os.makedirs(self.workdir)
             if verbose:
                 print('downloading '+ downloadUrl)
-            save_path = os.path.join(self.workdir, fileObj['name'])
-            r = requests.get(downloadUrl, stream=True)
 
+            save_dir = os.path.join(self.worker.datadir, fileObj['_id'])
+            save_path = os.path.join(save_dir, fileObj['name'])
+
+            if use_cache:
+                if os.path.exists(save_path):
+                    statinfo = os.stat(save_path)
+                    if statinfo.st_size == fileObj.size:
+                        if verbose:
+                            print('use cached file from '+ save_path)
+                        return save_path
+
+
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+
+            r = requests.get(downloadUrl, stream=True)
             with open(save_path, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=1024):
                     if chunk: # filter out keep-alive new chunks
@@ -327,7 +342,7 @@ class Widget(object):
 class Worker(object):
 
     def __init__(self, worker_id=None, worker_token=None,
-                 server_url='ws://localhost:3000/websocket', workdir='./', dev_mode=True, thread_num=10):
+                 server_url='ws://localhost:3000/websocket', workdir='./', dev_mode=True, thread_num=10, datadir=None):
         self.serverUrl = server_url
         self.id = worker_id
         assert not worker_id is None, 'Please set a valid worker id and token.'
@@ -351,6 +366,14 @@ class Worker(object):
         self.workdir = os.path.abspath(os.path.join(workdir, 'worker-'+worker_id))
         if not os.path.exists(self.workdir):
             os.makedirs(self.workdir)
+
+        if datadir is None:
+            datadir = os.path.join(workdir, 'data')
+
+        self.datadir = os.path.abspath(datadir)
+        if not os.path.exists(self.datadir):
+            os.makedirs(self.datadir)
+
         self.init()
         self.get_system_info()
         try:
