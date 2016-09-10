@@ -1,8 +1,8 @@
-# Toolkits for DistributedAI platform
+# Toolkits for AILab.AI platform (WIP)
 
-Python toolkits for connecting distributedAI platform, the following module are included:
+Python toolkits for connecting AILab.AI platform, the following module are included:
 ## `dai.Worker`
-The worker for communicating with distributedAI platform and executing tasks defined by widget.
+The worker for communicating with AILab.AI platform and executing tasks defined by widget.
 ## `dai.taskProcessors`
 A set of predefined taskProcessor to exectue tasks, three type of taskProcessors are implemented:
  * `TaskProcessor`, the base class, implement a plain task processor
@@ -17,7 +17,7 @@ pip install dai
 That's it.
 
 # Getting Start
-You need to login to distributedAI platform and then goto "Widget Workers", create a new worker, and get the id and token.
+You need to login to AILab.AI platform and then goto "Widget Workers", create a new worker, and get the id and token.
 
 As an example, we get a worker `id=iJX99fYEdfasigEAd` and `token=jguogvqlerkygcc`.
 
@@ -27,7 +27,7 @@ Then, to run the actual worker, you can open a python prompt session and type th
 import dai
 d = dai.Worker(worker_id='iJX99fYEdfasigEAd',
                worker_token='jguogvqlerkygcc',
-               server_url='ws://cabat.imod.pasteur.fr:3000/websocket',
+               server_url='ws://ailab.ai/websocket',
                workdir='./dai-workdir',
                dev_mode=True)
 d.start()
