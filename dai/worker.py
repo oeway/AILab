@@ -326,7 +326,8 @@ class Widget(object):
         widget_task_processor = self.default_task_processor
         ns = {'TASK': task, 'WIDGET': widget,
               'WORKER': worker, '__name__': '__worker__', 'time': time}
-        exec(widget.get('code_snippets')['__init___py']['content'], ns)
+        if widget.get('code_snippets').has_key('__init___py'):
+            exec(widget.get('code_snippets')['__init___py']['content'], ns)
         if ns.has_key('TASK_PROCESSOR'):
             return ns['TASK_PROCESSOR']
         else:
