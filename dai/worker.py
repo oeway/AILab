@@ -827,8 +827,14 @@ class ConnectionManager():
         if collection == 'tasks':
             if not self.worker.workTasks.has_key(id):
                 if fields.has_key('worker') and fields['worker'] == self.worker.id:
-                    task = Task(self.client.find_one('tasks', selector={
-                                '_id': id}), self.worker, self.client)
+                    taskDoc = self.client.find_one('tasks', selector={'_id': id})
+                    widget = self.worker.get_registered_widget(taskDoc['widgetId'])
+                    if widget:
+                        task = Task(taskDoc, self.worker, self.client)
+                    else:
+                        # remove task if widget is not registered
+                        self.client.call('tasks.update.worker', [
+                                               id, self.worker.id, self.worker.token, {'$set': {'visible2worker': False}}])
                     if task.id:
                         self.worker.add_task(task)
 
