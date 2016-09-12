@@ -176,7 +176,7 @@ class Task(object):
             if use_cache:
                 if os.path.exists(save_path):
                     statinfo = os.stat(save_path)
-                    if statinfo.st_size == fileObj.size:
+                    if statinfo.st_size == fileObj['size']:
                         if verbose:
                             print('use cached file from '+ save_path)
                         return save_path

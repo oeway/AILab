@@ -6,9 +6,8 @@ import datetime
 import numpy as np
 
 class ProgressTracker(keras.callbacks.Callback):
-    def __init__(self, task, save_weights=True):
+    def __init__(self, task):
         self.task = task
-        self.save_weights = save_weights
         self.start_time = time.time()
         super(ProgressTracker, self).__init__()
         self.task.set('status.progress', 0)
@@ -40,15 +39,16 @@ class ProgressTracker(keras.callbacks.Callback):
             if self.task.get('config.learning_rate'):
                 lr = float(self.task.get('config.learning_rate'))
                 K.set_value(self.model.optimizer.lr, lr)
-            else:
-                lr = K.get_value(self.model.optimizer.lr).tolist()
-            self.task.push('output.learning_rate', lr)
         else:
             self.task.set('status.error', 'Optimizer must have a "lr" attribute.')
 
     def on_epoch_end(self, epoch, logs={}):
-        self.task.push('output.epoch', epoch)
+        report = {}
+        report['epoch'] = epoch
         for k, v in logs.items():
-            self.task.push('output.'+k, v)
+            report[k] = v
+        if hasattr(self.model.optimizer, 'lr'):
+            report['lr'] = K.get_value(self.model.optimizer.lr).tolist()
+        self.task.push('output.training_history', report)
         self.task.set('output.elapsed_time', "%.2fs"%self.elapsed_time)
         self.task.set('output.last_epoch_update_time', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
