@@ -404,7 +404,7 @@ class Worker(object):
             'node': platform.node()}
         try:
             from sh import which
-            exe_checklist = ['nvcc', 'java', 'lua', 'qstat', 'squeue']
+            exe_checklist = ['nvcc', 'java', 'lua', 'qstat', 'squeue', 'python']
             self.resources['exe'] = {}
             for e in exe_checklist:
                 self.resources['exe'][e] = which(e)
