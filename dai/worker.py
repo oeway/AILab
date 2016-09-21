@@ -475,7 +475,7 @@ class Worker(object):
                 self.update_gpu_info()
             except Exception as e:
                 pass
-            self.set('resources', str(self.resources))
+            self.set('resources', self.resources)
             time.sleep(2.0)
 
     def register_widget(self, widget):
