@@ -361,7 +361,11 @@ class Worker(object):
         self.taskWorkerAbortEvents = []
         self.resources = {}
         self.cpuThreadCount = 50
-        self.workerVersion = "0.0"
+
+        from . import __version__
+        self.workerVersion = __version__
+        print('worker_version: '+str(__version__))
+        
         self.logger = logging.getLogger('worker')
 
         self.workdir = os.path.abspath(os.path.join(workdir, 'worker-'+worker_id))
@@ -395,9 +399,6 @@ class Worker(object):
         pass
 
     def get_system_info(self):
-        from . import __version__
-        self.resources['worker_version'] = __version__
-        print('worker_version: '+str(__version__))
         self.resources['cpu_thread'] = self.cpuThreadCount
         self.resources['platform'] ={
             'uname': ', '.join(platform.uname()),
