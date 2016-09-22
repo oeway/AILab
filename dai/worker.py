@@ -452,13 +452,13 @@ class Worker(object):
             info = get_nvml_info(i)
             if info is not None:
                 if 'memory' in info:
-                    gpuInfo['total_memory'] = Metrics(info['memory']['total'] / 2**20, 'MB')
-                    gpuInfo['used_memory'] = Metrics(info['memory']['used'] / 2**20, 'MB')
+                    gpuInfo['total_memory'] = (info['memory']['total'] / 2**20, 'MB')
+                    gpuInfo['used_memory'] = (info['memory']['used'] / 2**20, 'MB')
                 if 'utilization' in info:
-                    gpuInfo['memory_utilization'] = Metrics(info['utilization']['memory'], '%')
-                    gpuInfo['gpu_utilization'] = Metrics(info['utilization']['gpu'], '%')
+                    gpuInfo['memory_utilization'] = (info['utilization']['memory'], '%')
+                    gpuInfo['gpu_utilization'] = (info['utilization']['gpu'], '%')
                 if 'temperature' in info:
-                    gpuInfo['temperature'] = Metrics(info['temperature'], 'C')
+                    gpuInfo['temperature'] = (info['temperature'], 'C')
 
     def worker_monitor(self):
         while not self.connectionManager.ready:
@@ -543,6 +543,7 @@ class Worker(object):
             self.meteorClient.call('workers.update', [self.id, self.token, {
                                    '$set': vdict}], self.default_update_callback)
         except Exception as e:
+
             print('error ocurred during setting ' + key)
     def __setitem__(self, key, value):
         self.__set__(key, value)
