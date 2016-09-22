@@ -18,7 +18,7 @@ except ImportError:
     from queue import Queue, Empty  # python 3.x
 from subprocess import Popen, PIPE, STDOUT
 from utils import NonBlockingStreamReader
-from utils import Metrics, rate_limited
+from utils import rate_limited
 from MeteorFiles import Uploader
 
 RATE_LIMIT = 5
@@ -452,13 +452,13 @@ class Worker(object):
             info = get_nvml_info(i)
             if info is not None:
                 if 'memory' in info:
-                    gpuInfo['total_memory'] = (info['memory']['total'] / 2**20, 'MB')
-                    gpuInfo['used_memory'] = (info['memory']['used'] / 2**20, 'MB')
+                    gpuInfo['total_memory'] = info['memory']['total']
+                    gpuInfo['used_memory'] = info['memory']['used']
                 if 'utilization' in info:
-                    gpuInfo['memory_utilization'] = (info['utilization']['memory'], '%')
-                    gpuInfo['gpu_utilization'] = (info['utilization']['gpu'], '%')
+                    gpuInfo['memory_utilization'] = info['utilization']['memory']
+                    gpuInfo['gpu_utilization'] = info['utilization']['gpu']
                 if 'temperature' in info:
-                    gpuInfo['temperature'] = (info['temperature'], 'C')
+                    gpuInfo['temperature'] = info['temperature']
 
     def worker_monitor(self):
         while not self.connectionManager.ready:
