@@ -365,7 +365,7 @@ class Worker(object):
         from . import __version__
         self.workerVersion = __version__
         print('worker_version: '+str(__version__))
-        
+
         self.logger = logging.getLogger('worker')
 
         self.workdir = os.path.abspath(os.path.join(workdir, 'worker-'+worker_id))
@@ -419,7 +419,7 @@ class Worker(object):
         self.update_system_info()
 
     def update_system_info(self):
-        self.resources['date_time'] =  datetime.now().strftime("%d/%m %H:%M:%S")
+        self.resources['date_time'] =  datetime.now().strftime("%b %d %H:%M:%S")
 
     def get_gpu_info(self):
         from device_query import get_devices, get_nvml_info
