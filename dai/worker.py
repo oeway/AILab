@@ -395,6 +395,9 @@ class Worker(object):
         pass
 
     def get_system_info(self):
+        from . import __version__
+        self.resources['worker_version'] = __version__
+        print('worker_version: '+str(__version__))
         self.resources['cpu_thread'] = self.cpuThreadCount
         self.resources['platform'] ={
             'uname': ', '.join(platform.uname()),
@@ -415,7 +418,7 @@ class Worker(object):
         self.update_system_info()
 
     def update_system_info(self):
-        self.resources['date_time'] =  str(datetime.now())
+        self.resources['date_time'] =  datetime.now().strftime("%d/%m %H:%M:%S")
 
     def get_gpu_info(self):
         from device_query import get_devices, get_nvml_info
