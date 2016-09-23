@@ -147,14 +147,14 @@ class TaskProcessor(object):
             traceback.print_exc()
             self.task.set('status.error', traceback.format_exc())
         finally:
-            self.running = False
-            self.task.set('status.running', False)
-            self.task.set('visible2worker', False)
             try:
                 self.after()
             except Exception as e:
                 print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
                 traceback.print_exc()
+            self.running = False
+            self.task.set('status.running', False)
+            self.task.set('visible2worker', False)
 
     def before(self):
         pass
