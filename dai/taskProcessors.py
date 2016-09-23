@@ -226,13 +226,11 @@ class ThreadedTaskProcessor(TaskProcessor):
 class ProcessTaskProcessor_(TaskProcessor):
 
     def process_output(self, line):
-        self.task.set('status.progress', int(line))
-        print('processing line: ' + line)
-        sys.stdout.flush()
+        self.task.set('status.info', line)
         return True
 
     def task_arguments(self, resources, env):
-        return ['python', 'dummytask.py']
+        return ['python', '-V']
 
     def periodic_check(self, process):
         pass
@@ -240,11 +238,10 @@ class ProcessTaskProcessor_(TaskProcessor):
     def run(self, resources=None):
         env = os.environ.copy()
         args = self.task_arguments(resources, env)
+        if type(args) is str:
+            args = args.split()
         if not args:
-            print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
-            self.logger.error('Could not create the arguments for Popen')
-            self.task.set('status.error', 'Could not create the arguments for Popen')
-            return False
+            args = []
         # Convert them all to strings
         args = [str(x) for x in args if str(x) != '']
         self.logger.info('%s task started.' % self.name())
