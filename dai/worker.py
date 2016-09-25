@@ -148,6 +148,9 @@ class Task(object):
             selector['name'] = name
         return self.find_one(self.files(), selector)
 
+    def fetch(self, fileId, cb):
+        self.meteorClient.call('file.fetch.worker', [file, self.id, self.worker.id, self.worker.token], cb)
+
     def download(self, file, use_cache=True, verbose=False):
         assert file, 'please provide a file id or a file object to download'
         if isinstance(file, (str, unicode)):
