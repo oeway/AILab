@@ -132,31 +132,17 @@ class Task(object):
         # TODO: also make a copy to worker.datadir for potential further usage
         uploader.upload(filePath, meta=meta)
 
-    def files(self, **kwargs):
-        files = self.find('files', {"_id" : { "$in" : self.get("files") }})
-        if len(kwargs)>0:
-            files = self.find(files, kwargs)
-        return files
-
-    def file(self, name=None, id=None, **kwargs):
-        selector={}
-        for k,d in kwargs.items():
-            selector[k] = d
-        if id:
-            selector['_id'] = id
-        if name:
-            selector['name'] = name
-        return self.find_one(self.files(), selector)
-
-    def fetch(self, fileId, cb):
-        self.meteorClient.call('file.fetch.worker', [file, self.id, self.worker.id, self.worker.token], cb)
+    def fetch(self, fileId, callback):
+        self.meteorClient.call('file.fetch.worker', [fileId, self.id, self.worker.id, self.worker.token], callback)
 
     def download(self, file, use_cache=True, verbose=False):
         assert file, 'please provide a file id or a file object to download'
         if isinstance(file, (str, unicode)):
-            fileObj = self.meteorClient.find_one('files', {'_id': file})
+            self.fetch(file, lambda error, fileObj: self.download(fileObj, use_cache, verbose))
+            return
         else:
             fileObj = file
+
         if fileObj:
             baseurl = self.meteorClient.ddp_client.url
             assert baseurl.startswith('ws://') and baseurl.endswith('/websocket')
@@ -800,8 +786,6 @@ class ConnectionManager():
         if not 'workers.worker' in self.client.subscriptions:
             self.client.subscribe(
                 'workers.worker', [self.worker.id, self.worker.token])
-        if not 'files.worker' in self.client.subscriptions:
-            self.client.subscribe('files.worker', [self.worker.id, self.worker.token]);
 
     def logged_in(self, data):
         self.userId = data['id']
@@ -819,8 +803,6 @@ class ConnectionManager():
             else:
                 raise Exception('Failed to find the worker with id:{} token{}'.format(
                     self.worker.id, self.worker.token))
-        if subscription == 'files.worker':
-            print('files of this worker SUBSCRIBED-')
 
         if subscription == 'widgets.worker':
             print('widgets of this worker SUBSCRIBED-')
