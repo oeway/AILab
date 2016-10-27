@@ -132,7 +132,7 @@ class Task(object):
         # TODO: also make a copy to worker.datadir for potential further usage
         uploader.upload(filePath, meta=meta)
 
-    def file(self, fileId):
+    def file(self, fileId, timeout=10):
         self.__fetched = False
         self.__fileObj = None
         def callback(error, fileObject):
@@ -142,14 +142,14 @@ class Task(object):
             self.__fileObj = fileObject
         timeout_start = time.time()
         self.meteorClient.call('file.fetch.worker', [fileId, self.id, self.worker.id, self.worker.token], callback)
-        while time.time() < timeout_start + fetch_timeout:
+        while time.time() < timeout_start + timeout:
             if self.__fetched:
                 break
             time.sleep(0.1)
         # print(time.time()-timeout_start)
         return self.__fileObj
 
-    def download(self, file, use_cache=True, verbose=False, fetch_timeout=10):
+    def download(self, file, use_cache=True, verbose=False):
         assert file, 'please provide a file id or a file object to download'
         if isinstance(file, (str, unicode)):
             fileObj = self.file(file)
