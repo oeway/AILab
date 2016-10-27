@@ -299,6 +299,7 @@ class ProcessTaskProcessor_(TaskProcessor):
                 if self.abort.is_set():
                     if sigterm_time is None:
                         # Attempt graceful shutdown
+                        p.send_signal(signal.SIGINT)
                         p.send_signal(signal.SIGTERM)
                         sigterm_time = time.time()
                 if sigterm_time is not None and (time.time() - sigterm_time > sigterm_timeout):

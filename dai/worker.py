@@ -132,14 +132,31 @@ class Task(object):
         # TODO: also make a copy to worker.datadir for potential further usage
         uploader.upload(filePath, meta=meta)
 
-    def fetch(self, fileId, callback):
+    def file(self, fileId):
+        self.__fetched = False
+        self.__fileObj = None
+        def callback(error, fileObject):
+            self.__fetched = True
+            if error:
+                print(error)
+            self.__fileObj = fileObject
+        timeout_start = time.time()
         self.meteorClient.call('file.fetch.worker', [fileId, self.id, self.worker.id, self.worker.token], callback)
+        while time.time() < timeout_start + fetch_timeout:
+            if self.__fetched:
+                break
+            time.sleep(0.1)
+        # print(time.time()-timeout_start)
+        return self.__fileObj
 
-    def download(self, file, use_cache=True, verbose=False):
+    def download(self, file, use_cache=True, verbose=False, fetch_timeout=10):
         assert file, 'please provide a file id or a file object to download'
         if isinstance(file, (str, unicode)):
-            self.fetch(file, lambda error, fileObj: self.download(fileObj, use_cache, verbose))
-            return
+            fileObj = self.file(file)
+            if fileObj:
+                return self.download(fileObj, use_cache, verbose)
+            else:
+                return None
         else:
             fileObj = file
 
@@ -821,12 +838,12 @@ class ConnectionManager():
                     widget = self.worker.get_registered_widget(taskDoc['widgetId'])
                     if widget:
                         task = Task(taskDoc, self.worker, self.client)
+                        if task and task.id:
+                            self.worker.add_task(task)
                     else:
                         # remove task if widget is not registered
                         self.client.call('tasks.update.worker', [
                                                id, self.worker.id, self.worker.token, {'$set': {'visible2worker': False}}])
-                    if task.id:
-                        self.worker.add_task(task)
 
         elif collection == 'users':
             self.userName = fields['username']
