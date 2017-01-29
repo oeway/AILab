@@ -625,13 +625,11 @@ class Worker(object):
                 try:
                     #task.set('status', {"stage":'-', "running": False, "error":'', "progress":-1})
                     if not 'autoRestart' in task.get('tags') and (task.get('status.running') or task.get('status.waiting')):
-                        task.set('cmd', '')
-                        task.set('status.stage', 'interrupted')
-                        task.set('status.running', False)
-                        task.set('status.waiting', False)
-                        task.set('status.error', 'worker restarted unexpectedly.')
+                        raise Exception('worker restarted unexpectedly.')
                     if 'ing' in task.get('status.stage'):
                         task.set('status.stage', '-')
+                    if task.get('cmd') == '':
+                        raise Exception('no command available.')
                     tp = task_processor(task, widget, self)
                 except Exception as e:
                     traceback.print_exc()
@@ -697,6 +695,9 @@ class Worker(object):
         if cmd == 'run':
             print('---run task---')
             self.run_task(task)
+        if cmd == 'show':
+            print('--show task--')
+            task.set('cmd', '')
         elif cmd == 'stop':
             print('---stop task---')
             self.stop_task(task)
@@ -914,7 +915,7 @@ class ConnectionManager():
                         self.worker.execute_worker_cmd(worker['cmd'])
 
     def removed(self, collection, id):
-        #print('* REMOVED {} {}'.format(collection, id))
+        print('* REMOVED {} {}'.format(collection, id))
         if collection == 'tasks':
             if self.worker.workTasks.has_key(id):
                 task = self.worker.workTasks[id]
