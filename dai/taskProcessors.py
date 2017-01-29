@@ -239,7 +239,8 @@ class ProcessTaskProcessor_(TaskProcessor):
     def task_arguments(self, **kwargs):
         return ['python', '-V']
 
-    def periodic_check(self, process):
+    def periodic_task(self, process):
+        # check generated files/upload files etc.
         pass
 
     def run(self, **kwargs):
@@ -283,7 +284,7 @@ class ProcessTaskProcessor_(TaskProcessor):
                 except(UnexpectedEndOfStream):
                     endofstream = True
                 try:
-                    self.periodic_check(p)
+                    self.periodic_task(p)
                 except:
                     traceback.print_exc()
 

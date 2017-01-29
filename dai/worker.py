@@ -21,7 +21,7 @@ from utils import NonBlockingStreamReader
 from utils import rate_limited
 from MeteorFiles import Uploader
 
-RATE_LIMIT = 5
+RATE_LIMIT = 1 #s
 
 class Task(object):
 
@@ -93,15 +93,15 @@ class Task(object):
     def get(self, key):
         return self.__getitem__(key)
 
-    @rate_limited(RATE_LIMIT, important=True)
+    #@rate_limited(RATE_LIMIT, important=True)
     def set(self, key, value=None):
         self.__set__(key, value)
 
-    @rate_limited(RATE_LIMIT, important=False)
+    #@rate_limited(RATE_LIMIT, important=False)
     def update(self, key, value=None):
         self.__set__(key, value)
 
-    @rate_limited(RATE_LIMIT, important=True)
+    #@rate_limited(RATE_LIMIT, important=True)
     def push(self, key, value=None):
         try:
             vdict = key if type(key) is dict and value is None else {key: value}
@@ -110,7 +110,7 @@ class Task(object):
         except Exception as e:
             print('error ocurred during setting ' + key)
 
-    @rate_limited(RATE_LIMIT, important=True)
+    #@rate_limited(RATE_LIMIT, important=True)
     def pull(self, key, value=None):
         try:
             vdict = key if type(key) is dict and value is None else {key: value}
@@ -314,11 +314,11 @@ class Widget(object):
     def get(self, key):
         return self.__getitem__(key)
 
-    @rate_limited(RATE_LIMIT, important=True)
+    #@rate_limited(RATE_LIMIT, important=True)
     def set(self, key, value):
         self.__setitem__(key, value)
 
-    @rate_limited(RATE_LIMIT, important=False)
+    #@rate_limited(RATE_LIMIT, important=False)
     def update(self, key, value):
         self.__setitem__(key, value)
 
@@ -365,7 +365,8 @@ class Worker(object):
 
         from . import __version__
         self.workerVersion = __version__ or 'UNKNOWN'
-        print('worker_version: '+str(__version__))
+
+        print('worker version: '+str(__version__))
 
         self.logger = logging.getLogger('worker')
 
@@ -555,15 +556,15 @@ class Worker(object):
     def get(self, key):
         return self.__getitem__(key)
 
-    @rate_limited(RATE_LIMIT)
+    #@rate_limited(RATE_LIMIT)
     def set(self, key, value=None):
         self.__set__(key, value)
 
-    @rate_limited(RATE_LIMIT, important=False)
+    #@rate_limited(RATE_LIMIT, important=False)
     def update(self, key, value=None):
         self.__set__(key, value)
 
-    @rate_limited(RATE_LIMIT)
+    #@rate_limited(RATE_LIMIT)
     def push(self, key, value):
         try:
             self.meteorClient.call('workers.update', [self.id, self.token, {
@@ -571,7 +572,7 @@ class Worker(object):
         except Exception as e:
             print('error ocurred during setting ' + key)
 
-    @rate_limited(RATE_LIMIT)
+    #@rate_limited(RATE_LIMIT)
     def pull(self, key, value):
         try:
             self.meteorClient.call('workers.update', [self.id, self.token, {
@@ -782,6 +783,7 @@ class Worker(object):
 class ConnectionManager():
 
     def __init__(self, server_url='ws://localhost:3000/websocket', worker=None):
+        self.server_url = server_url
         self.client = MeteorClient(server_url)
         self.client.on('subscribed', self.subscribed)
         self.client.on('unsubscribed', self.unsubscribed)
@@ -800,7 +802,7 @@ class ConnectionManager():
 
     def connected(self):
         self.connected = True
-        print('* CONNECTED')
+        print('connected to ' + self.server_url)
         #self.client.login('test', '*****')
         if not 'workers.worker' in self.client.subscriptions:
             self.client.subscribe(

@@ -5,33 +5,62 @@ import os
 import datetime
 import numpy as np
 import re
+import traceback
+from random import randint
 
 from taskProcessors import ProcessTaskProcessor
 
-def parseTrainingProgress(process, line):
+def parseTrainingProgress(self, line):
     try:
+        line = line.replace('\b','')
         # print(line[:250])
+        updateDict = {}
         epochList = re.findall(r'Epoch (\d+)\/(\d+)', line)
         if len(epochList)>0:
-            process.task.set('status.stage', 'Epoch '+epochList[-1][0]+'/'+epochList[-1][1])
-        progressList = re.findall(r'(\d+)\/(\d+)', line)
+            self.currentEpoch = int(epochList[-1][0])
+            self.totalEpoch = int(epochList[-1][1])
+            self.task.set({'status.stage':'Epoch '+epochList[-1][0]+'/'+epochList[-1][1],
+                        'output.current_epoch': self.currentEpoch,
+                        'output.total_epoch': self.totalEpoch
+            })
+
+        progressList = re.findall(r'(\d+)\/(\d+) \[', line)
         if len(progressList)>0:
-            process.task.set('status.progress', int(float(progressList[-1][0])/float(progressList[-1][1])*100))
+            prog = int(float(progressList[-1][0])/float(progressList[-1][1])*100.0)
+            updateDict['status.progress'] = prog
+
         etaList = re.findall(r' - ETA: (\d+)s', line)
+        if len(etaList) >0:
+            mDict = {}
+            for m in self.metrics:
+                s = re.findall(r' - '+m+': ([-+]?\d*\.\d+|\d+)', line)
+                if len(s)>0:
+                    mDict[m] = float(s[-1])
+            updateDict['output.current_metrics'] = mDict
+
         totalTimeList = re.findall(r' - (\d+)s', line)
-        lossList = re.findall(r' - loss: ([-+]?\d*\.\d+|\d+)', line)
-        lossList = re.findall(r' - val_loss: ([-+]?\d*\.\d+|\d+)', line)
-        accList = re.findall(r' - acc: ([-+]?\d*\.\d+|\d+)', line)
-        process.task.update('status.info', line.replace('\b','')[:150])
+        if len(totalTimeList) >0:
+            mDict = {'epoch': self.currentEpoch }
+            for m in self.metrics:
+                s = re.findall(r' - '+m+': ([-+]?\d*\.\d+|\d+)', line)
+                if len(s)>0:
+                    mDict[m] = float(s[-1])
+            self.task.push('output.training_history', mDict)
+        if(randint(0,9)>5):
+            updateDict['status.info'] = line[:150]
+            self.task.update(updateDict)
+        return True
     except Exception as e:
         print('failed to parse output')
-        print(int(float(progressList[-1][0])/float(progressList[-1][1])*100))
+        traceback.print_exc()
         return False
 
 class KerasProcess(ProcessTaskProcessor):
+    metrics = ['loss', 'val_loss']
+    currentEpoch = -1
+    totalEpoch = 0
     def process_output(self, line):
-        parseTrainingProgress(self,line)
-        return True
+        return parseTrainingProgress(self,line)
 
 
 class ProgressTracker(keras.callbacks.Callback):
