@@ -4,6 +4,35 @@ import time
 import os
 import datetime
 import numpy as np
+import re
+
+from taskProcessors import ProcessTaskProcessor
+
+def parseTrainingProgress(process, line):
+    # print(line[:250])
+    epochList = re.findall(r'Epoch (\d+)\/(\d+)', line)
+    if len(epochList)>0:
+        process.task.set('status.stage', 'Epoch '+epochList[-1][0]+'/'+epochList[-1][1])
+    progressList = re.findall(r'(\d+)\/(\d+)', line)
+    if len(progressList)>0:
+        process.task.set('status.progress', int(float(progressList[-1][0])/float(progressList[-1][1])*100))
+    etaList = re.findall(r' - ETA: (\d+)s', line)
+    totalTimeList = re.findall(r' - (\d+)s', line)
+    lossList = re.findall(r' - loss: ([-+]?\d*\.\d+|\d+)', line)
+    lossList = re.findall(r' - val_loss: ([-+]?\d*\.\d+|\d+)', line)
+    accList = re.findall(r' - acc: ([-+]?\d*\.\d+|\d+)', line)
+    process.task.update('status.info', line.replace('\b','')[:150])
+
+
+class KerasProcess(ProcessTaskProcessor):
+    def process_output(self, line):
+        try:
+            parseTrainingProgress(self,line)
+        except Exception as e:
+            print('failed to parse output')
+            return False
+        return True
+
 
 class ProgressTracker(keras.callbacks.Callback):
     def __init__(self, task):

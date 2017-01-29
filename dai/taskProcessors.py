@@ -28,12 +28,11 @@ class TaskProcessor(object):
         self.abort = self.task.abort
         self.exception = None
         self.running = False
+        self.waiting = False
         self.workdir = self.task.workdir
         self.make_workdir()
         self.changeCallbackDict = {}
         self.removeCallbackList = []
-        self.requirements = {}
-        self.resourcesOcuppied = {}
         if save_widget_code:
             self.save_widget_code()
         self.task.save()
@@ -83,17 +82,24 @@ class TaskProcessor(object):
             print('error ocurred during setting ' + key)
 
     def stop(self):
-        self.abort.set()
-        for subtask in self.task.subtasks:
-            if subtask.processor:
-                subtask.processor.abort.set()
-        self.task.set('status.stage', 'aborting')
-        print('stopping task...')
+        if self.running:
+            self.abort.set()
+            for subtask in self.task.subtasks:
+                if subtask.processor:
+                    subtask.processor.abort.set()
+            self.task.set('status.stage', 'aborting')
+            print('stopping task...')
+        if self.waiting:
+            self.task.set('status.stage', 'cancelled')
+            self.task.set('status.waiting', False)
+            self.waiting = False
 
-    def start(self, resources=None):
+    def start(self, **kwargs):
         self.abort.clear()
+        self.waiting = False
         self.running = True
         self.task.set('status.stage', 'starting')
+        self.task.set('status.waiting', False)
         self.task.set('status.running', True)
         self.task.set('status.progress', -1)
         self.task.set('status.error', '')
@@ -101,7 +107,7 @@ class TaskProcessor(object):
         try:
             self.before()
             self.task.save()
-            self.run(resources)
+            self.run(**kwargs)
         except Exception as e:
             print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
             traceback.print_exc()
@@ -153,6 +159,7 @@ class TaskProcessor(object):
                 print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
                 traceback.print_exc()
             self.running = False
+            self.waiting = False
             self.task.set('status.running', False)
             self.task.set('visible2worker', False)
 
@@ -166,13 +173,13 @@ class TaskProcessor(object):
     def after_runtime_error(self):
         print('after_runtime_error')
 
-    def task_arguments(self, resources, env):
+    def task_arguments(self, **kwargs):
         return []
 
     def name(self):
         return self.task.get('name')
 
-    def run(self, resources=None):
+    def run(self, **kwargs):
         '''
         should call self.end() after all process is over
         '''
@@ -185,7 +192,7 @@ class TaskProcessor(object):
         finished = 0
         for subtask in self.task.subtasks:
             prog +=subtask.get('status.progress')
-            if not subtask.processor.running:
+            if not subtask.processor.running and not subtask.processor.waiting:
                 finished +=1
         status['progress'] = prog
         status['finished'] = finished
@@ -198,20 +205,20 @@ class ThreadedTaskProcessor(TaskProcessor):
         self.process = process
         super(ThreadedTaskProcessor, self).__init__(task, widget, worker, **kwargs)
 
-    def task_arguments(self, resources, env):
+    def task_arguments(self, **kwargs):
         return []
 
-    def run(self, resources=None):
+    def run(self, **kwargs):
         self.taskThread = threading.Thread(target=self.run_thread,
-                                           args=self.task_arguments(resources, None))
+                                           args=self.task_arguments(**kwargs))
         self.taskThread.daemon = True
         self.taskThread.start()
 
-    def run_thread(self, *args):
+    def run_thread(self, **kwargs):
         try:
-            self.process_task(*args)
+            self.process_task(**kwargs)
             if self.process:
-                self.process(self.task, *args)
+                self.process(self.task, **kwargs)
         except Exception as e:
             print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
             traceback.print_exc()
@@ -219,7 +226,7 @@ class ThreadedTaskProcessor(TaskProcessor):
         finally:
             self.end()
 
-    def process_task(self, *args):
+    def process_task(self, **kwargs):
         pass
 
 
@@ -229,15 +236,15 @@ class ProcessTaskProcessor_(TaskProcessor):
         self.task.set('status.info', line)
         return True
 
-    def task_arguments(self, resources, env):
+    def task_arguments(self, **kwargs):
         return ['python', '-V']
 
     def periodic_check(self, process):
         pass
 
-    def run(self, resources=None):
+    def run(self, **kwargs):
         env = os.environ.copy()
-        args = self.task_arguments(resources, env)
+        args = self.task_arguments(**kwargs)
         if type(args) is str:
             args = args.split()
         if not args:
@@ -341,15 +348,15 @@ class ProcessTaskProcessor_(TaskProcessor):
             return True
 
 class ProcessTaskProcessor(ProcessTaskProcessor_):
-    def run(self, resources=None):
+    def run(self, **kwargs):
         self.taskThread = threading.Thread(target=self.run_thread,
-                                           args=[resources])
+                                           kwargs=kwargs)
         self.taskThread.daemon = True
         self.taskThread.start()
 
-    def run_thread(self, *args):
+    def run_thread(self, **kwargs):
         try:
-            super(ProcessTaskProcessor, self).run(*args)
+            super(ProcessTaskProcessor, self).run(**kwargs)
         except Exception as e:
             print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
             traceback.print_exc()

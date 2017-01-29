@@ -62,34 +62,30 @@ class Task(object):
 
     def __set__(self, key, value=None):
         assert (type(key) is str and not value is None)or (type(key) is dict and value is None)
-        if key == 'running':
-            if self.processor:
-                self.processor.running = value
-            return
+
         if not type(key) is dict and self.get(key) == value:
             return
 
         if type(key) is dict:
             vdict = key
-            try:
-                self.meteorClient.call('tasks.update.worker', [
-                                       self.id, self.worker.id, self.worker.token, {'$set': vdict}])
-            except Exception as e:
-                print('error ocurred during setting ' + str(vdict))
-            finally:
-                return
-
-        if key == "visible2worker" and value == False:
-            vdict = {key: value, "status.running": False}
-        elif self.processor and self.get('status.running') != self.processor.running:
-            vdict = {key: value, "status.running": self.processor.running}
-        else:
-            vdict = {key: value}
-        try:
             self.meteorClient.call('tasks.update.worker', [
                                    self.id, self.worker.id, self.worker.token, {'$set': vdict}])
-        except Exception as e:
-            print('error ocurred during setting ' + str(vdict))
+            return
+
+        if key == "visible2worker" and value == False:
+            vdict = {key: value, "status.running": False, "status.waiting": False}
+        # elif self.processor and (self.get('status.running') != self.processor.running or self.get('status.waiting') != self.processor.waiting):
+        #     vdict = {key: value, "status.running": self.processor.running, "status.waiting": self.processor.waiting}
+        else:
+            vdict = {key: value}
+
+        self.meteorClient.call('tasks.update.worker', [
+                               self.id, self.worker.id, self.worker.token, {'$set': vdict}])
+        # if key == 'running':
+        #     if self.processor:
+        #         self.processor.running = value
+        #     return
+
 
     def __setitem__(self, key, value):
         return self.__set__(key,value)
@@ -366,10 +362,9 @@ class Worker(object):
         self.taskWorkerThreads = []
         self.taskWorkerAbortEvents = []
         self.resources = {}
-        self.cpuThreadCount = 50
 
         from . import __version__
-        self.workerVersion = __version__
+        self.workerVersion = __version__ or 'UNKNOWN'
         print('worker_version: '+str(__version__))
 
         self.logger = logging.getLogger('worker')
@@ -405,7 +400,6 @@ class Worker(object):
         pass
 
     def get_system_info(self):
-        self.resources['cpu_thread'] = self.cpuThreadCount
         self.resources['platform'] ={
             'uname': ', '.join(platform.uname()),
             'machine':  platform.machine(),
@@ -630,10 +624,11 @@ class Worker(object):
             if task_processor:
                 try:
                     #task.set('status', {"stage":'-', "running": False, "error":'', "progress":-1})
-                    if not 'autoRestart' in task.get('tags') and task.get('status.running') == True:
+                    if not 'autoRestart' in task.get('tags') and (task.get('status.running') or task.get('status.waiting')):
                         task.set('cmd', '')
                         task.set('status.stage', 'interrupted')
                         task.set('status.running', False)
+                        task.set('status.waiting', False)
                         task.set('status.error', 'worker restarted unexpectedly.')
                     if 'ing' in task.get('status.stage'):
                         task.set('status.stage', '-')
@@ -642,6 +637,7 @@ class Worker(object):
                     traceback.print_exc()
                     task.set('status', task.get('status') or {})
                     task.set('status.running', False)
+                    task.set('status.waiting', False)
                     task.set('status.error', traceback.format_exc())
                     task.set('cmd', '')
                     task.set('visible2worker', False)
@@ -654,7 +650,7 @@ class Worker(object):
                                 for t in self.workTasks.values():
                                     if t.get('parent') == task.id:
                                         task.subtasks.add(t)
-                                        if t.processor and t.processor.running:
+                                        if t.processor and (t.processor.running or t.processor.waiting):
                                             if not task.get('cmd') or task.get('cmd') == '':
                                                 task.set('cmd','run')
                             elif self.workTasks.has_key(task.get('parent')):
@@ -686,7 +682,7 @@ class Worker(object):
             return
         if self.workTasks.has_key(task.id):
             task = self.workTasks[task.id]
-            if task.processor.running:
+            if task.processor.running or task.processor.waiting:
                 task.processor.stop()
             # remove this task from parent task
             if task.get('parent') and self.workTasks.has_key(task.get('parent')):
@@ -715,17 +711,16 @@ class Worker(object):
     def run_task(self, task):
         id = task.id
         if self.workTasks.has_key(id):
-            if self.workTasks[id].processor:
-                self.workTasks[id].processor.start()
-            else:
-                self.taskQueue.put(id)
-                task.set('status.stage', 'queued')
-                print('task Qsize:' + str(self.taskQueue.qsize()))
+            self.taskQueue.put(id)
+            task.set('status.waiting', True)
+            task.processor.waiting = True
+            task.set('status.stage', 'queued')
+            print('task Qsize:' + str(self.taskQueue.qsize()))
 
     def stop_task(self, task):
         id = task.id
         if self.workTasks.has_key(id):
-            if self.workTasks[id].processor.running:
+            if self.workTasks[id].processor.running or self.workTasks[id].processor.waiting:
                 self.workTasks[id].processor.stop()
 
     def work_on_task(self, abortEvent):
@@ -740,15 +735,19 @@ class Worker(object):
                     self.set('status', 'running')
                 if self.workTasks.has_key(taskId):
                     task = self.workTasks[taskId]
-                    if task.processor:
+                    if task.processor and task.processor.waiting:
                         if not task.get('parent'):
                             task.processor.start()
+                            while task.processor.running:
+                                time.sleep(0.1)
                         elif task.get('parent') and self.workTasks.has_key(task.get('parent')):
                             ptask = self.workTasks[task.get('parent')]
                             if ptask.processor and not ptask.processor.running:
                                 task.set('status.stage', 'waiting')
                                 ptask.processor.start()
                             task.processor.start()
+                            while task.processor.running:
+                                time.sleep(0.1)
                         else:
                             task.set('status.stage', 'ignored')
                             task.set('status.error', 'parent task is not in the available to worker')
@@ -769,7 +768,7 @@ class Worker(object):
     def stop(self):
         try:
             for task in self.workTasks:
-                if task.processor.running:
+                if task.processor.running or task.processor.waiting :
                     task.processor.stop()
         except Exception as e:
             pass
@@ -968,7 +967,7 @@ if __name__ == '__main__':
     parser.add_argument('--worker-token', dest='worker_token',
                         type=str, default='', help='token of the worker')
     parser.add_argument('--server-url', dest='server_url', type=str,
-                        default='ws://localhost:3000/websocket', help='server url')
+                        default='wss://ai.pasteur.fr/websocket', help='server url')
     parser.add_argument('--workdir', dest='workdir', type=str,
                         default='./workdir', help='workdir')
     parser.add_argument('--dev-mode', dest='dev_mode',
