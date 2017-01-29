@@ -96,11 +96,11 @@ class TaskProcessor(object):
 
     def start(self, **kwargs):
         self.abort.clear()
-        self.waiting = False
-        self.running = True
         self.task.set('status.stage', 'starting')
         self.task.set('status.waiting', False)
         self.task.set('status.running', True)
+        self.waiting = False
+        self.running = True
         self.task.set('status.progress', -1)
         self.task.set('status.error', '')
         print('starting...')

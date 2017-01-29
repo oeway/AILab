@@ -711,11 +711,11 @@ class Worker(object):
     def run_task(self, task):
         id = task.id
         if self.workTasks.has_key(id):
-            self.taskQueue.put(id)
             task.set('status.waiting', True)
             task.processor.waiting = True
             task.set('status.stage', 'queued')
             print('task Qsize:' + str(self.taskQueue.qsize()))
+            self.taskQueue.put(id)
 
     def stop_task(self, task):
         id = task.id
@@ -749,6 +749,8 @@ class Worker(object):
                             while task.processor.running:
                                 time.sleep(0.1)
                         else:
+                            task.processor.waiting = False
+                            task.set('status.waiting', False)
                             task.set('status.stage', 'ignored')
                             task.set('status.error', 'parent task is not in the available to worker')
                             task.set('visible2worker', False)
