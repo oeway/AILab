@@ -283,6 +283,7 @@ class ProcessTaskProcessor_(TaskProcessor):
                 try:
                     line = nbsr.readline(0.1)
                 except(UnexpectedEndOfStream):
+                    line = None
                     endofstream = True
                 try:
                     self.periodic_task(p)
