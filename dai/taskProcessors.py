@@ -262,8 +262,9 @@ class ProcessTaskProcessor_(TaskProcessor):
             args = ' '.join(args)
         self.logger.info('Task subprocess args: {}'.format(args))
         try:
+            # we use shell mode, so it won't work nicely on windows
             p = Popen(args, bufsize=0, stdout=PIPE, stderr=STDOUT,
-                      shell=False, universal_newlines=True)
+                      shell=True, universal_newlines=True)
         except Exception as e:
             print('error from task, taskName:{} taskId:{} widgetId:{}'.format(self.task.get('name'), self.task.id, self.task.get('widgetId')))
             traceback.print_exc()
