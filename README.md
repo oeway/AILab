@@ -52,7 +52,7 @@ Another task processor code example:
 import time
 from dai.taskProcessors import ThreadedTaskProcessor
 
-def process_task(task, *args):
+def process_task(task, **kwargs):
     # start task
     task.set("status.stage", "started")
 
