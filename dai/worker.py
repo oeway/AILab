@@ -662,6 +662,7 @@ class Worker(object):
                                 print('ignore task {}/{}, disable it from worker'.format(task.get('name'), task.id))
                     else:
                         task.set('status.error', 'no task processor defined.')
+                        task.set('visible2worker', False)
                         return None
                 if self.workTasks.has_key(taskId):
                     self.execute_task_cmd(
@@ -844,6 +845,10 @@ class ConnectionManager():
                         task = Task(taskDoc, self.worker, self.client)
                         if task and task.id:
                             self.worker.add_task(task)
+                        else:
+                            # remove task if widget is not registered
+                            self.client.call('tasks.update.worker', [
+                                                   id, self.worker.id, self.worker.token, {'$set': {'visible2worker': False}}])
                     else:
                         # remove task if widget is not registered
                         self.client.call('tasks.update.worker', [
