@@ -27,7 +27,7 @@ Then, to run the actual worker, you can open a python prompt session and type th
 import dai
 d = dai.Worker(worker_id='iJX99fYEdfasigEAd',
                worker_token='jguogvqlerkygcc',
-               server_url='ws://ai.pasteur.fr/websocket',
+               server_url='wss://ai.pasteur.fr/websocket',
                workdir='./dai-workdir',
                dev_mode=True)
 d.start()
@@ -47,6 +47,20 @@ if __name__ == "__worker__":
     TASK_PROCESSOR = Process(TASK, WIDGET, WORKER)
 ```
 
+A task processor code example:
+```python
+from dai.taskProcessors import ProcessTaskProcessor
+class MyProcess(ProcessTaskProcessor):
+    def task_arguments(self):
+        x = self.task.get('input.x')
+        return ['python', 'test.py', x]
+
+    def process_output(self, line):
+        print(line)
+
+if __name__ == "__worker__":
+    TASK_PROCESSOR = MyProcess(TASK, WIDGET, WORKER)
+```
 Another task processor code example:
 ```python
 import time
