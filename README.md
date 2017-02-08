@@ -1,8 +1,8 @@
-# Toolkits for AILab.AI platform (WIP)
+# Toolkits for AILab platform (WIP)
 
-Python toolkits for connecting AILab.AI platform, the following module are included:
+Python toolkits for connecting AILab platform(http://ai.pasteur.fr), the following module are included:
 ## `dai.Worker`
-The worker for communicating with AILab.AI platform and executing tasks defined by widget.
+The worker for communicating with [AILab platform](http://ai.pasteur.fr) and executing tasks defined by widget.
 ## `dai.taskProcessors`
 A set of predefined taskProcessor to exectue tasks, three type of taskProcessors are implemented:
  * `TaskProcessor`, the base class, implement a plain task processor
@@ -17,7 +17,7 @@ pip install dai
 That's it.
 
 # Getting Start
-You need to login to AILab.AI platform and then goto "Widget Workers", create a new worker, and get the id and token.
+You need to login to [AILab platform](http://ai.pasteur.fr) and then goto "Widget Workers", create a new worker, and get the id and token.
 
 As an example, we get a worker `id=iJX99fYEdfasigEAd` and `token=jguogvqlerkygcc`.
 
