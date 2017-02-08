@@ -25,10 +25,15 @@ Then, to run the actual worker, you can open a python prompt session and type th
 
 ```python
 import dai
-d = dai.Worker(worker_id='iJX99fYEdfasigEAd',
-               worker_token='jguogvqlerkygcc',
+
+worker_id='iJX99fYEdfasigEAd'
+worker_token='jguogvqlerkygcc'
+workdir='./dai-workdir'
+
+d = dai.Worker(worker_id=worker_id,
+               worker_token=worker_token,
                server_url='wss://ai.pasteur.fr/websocket',
-               workdir='./dai-workdir',
+               workdir=workdir,
                dev_mode=True)
 d.start()
 ```
