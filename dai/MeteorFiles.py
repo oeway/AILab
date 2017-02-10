@@ -68,6 +68,9 @@ class Uploader():
             self.error = True
             print(error)
             return
+        baseurl = self.client.ddp_client.url
+        assert (baseurl.startswith('ws://') or baseurl.startswith('wss://')) and baseurl.endswith('/websocket')
+        uploadRoute = 'http' + baseurl[2:-10] + metaResult['uploadRoute']
         try:
             with open(self.filePath, "rb") as _file:
                 for i in xrange(self.chunkCount):
@@ -94,10 +97,6 @@ class Uploader():
                         self.client.call(self.methodNames['_Write'], [
                                          opts], self._upload_write_callback)
                     else:
-                        baseurl = self.client.ddp_client.url
-                        assert (baseurl.startswith('ws://') or baseurl.startswith('wss://')) and baseurl.endswith('/websocket')
-                        uploadRoute = 'http' + \
-                            baseurl[2:-10] + metaResult['uploadRoute']
                         headers = {
                             "x-eof": 0,
                             "x-fileid": self.fileId,
